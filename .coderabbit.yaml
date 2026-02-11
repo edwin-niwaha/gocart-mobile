@@ -1,0 +1,25 @@
+language: "en"
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  path_filters:
+    - "!android/**"
+    - "!ios/**"
+    - "!node_modules/**"
+    - "!build/**"
+    - "!dist/**"
+    - "!coverage/**"
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false

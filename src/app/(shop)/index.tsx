@@ -1,63 +1,37 @@
 import {
   FlatList,
-  Image,
   StyleSheet,
-  Text,
   View
 } from 'react-native';
-
 import { PRODUCTS } from '../../../assets/products';
 
-const styles = StyleSheet.create({
-  flatListContent: {
-    padding: 16,
-  },
-  card: {
-    marginBottom: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  image: {
-    width: '100%',
-    height: 200,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: '600',
-    padding: 12,
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '700',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    color: '#2563eb',
-  },
-});
+import { ListHeader } from '@/src/components/list-header';
+import { ProductListItem } from '../../components/product-list-item';
 
 const Home = () => {
   return (
-    <View style={{ flex: 1 }}>
+    <View>
       <FlatList
         data={PRODUCTS}
-        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <ProductListItem product={item} />}
+        keyExtractor={item => item.id.toString()}
+        numColumns={2}
+        ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.flatListContent}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Image source={{ uri: item.image }} style={styles.image} />
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.price}>${item.price}</Text>
-          </View>
-        )}
+        columnWrapperStyle={styles.flatListColumn}
+        style={{ paddingHorizontal: 10, paddingVertical: 5 }}
       />
     </View>
   );
 };
 
 export default Home;
+
+const styles = StyleSheet.create({
+  flatListContent: {
+    paddingBottom: 20,
+  },
+  flatListColumn: {
+    justifyContent: 'space-between',
+  },
+});
