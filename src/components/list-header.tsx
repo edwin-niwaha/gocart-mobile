@@ -7,13 +7,20 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View
 } from 'react-native';
+import { supabase } from '../lib/supabase';
 import { useCartStore } from '../store/cart-store';
 
 
 export const ListHeader = ({ }) => {
   const { getItemCount } = useCartStore();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <View style={[styles.headerContainer]}>
       <View style={styles.headerTop}>
@@ -46,6 +53,12 @@ export const ListHeader = ({ }) => {
               )}
             </Pressable>
           </Link>
+          <TouchableOpacity
+            onPress={handleSignOut}
+            style={styles.signOutButton}
+          >
+            <FontAwesome name='sign-out' size={25} color='red' />
+          </TouchableOpacity>
         </View>
       </View>
       <View style={styles.heroContainer}>
