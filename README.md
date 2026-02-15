@@ -14,7 +14,12 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
    ```bash
    npx expo start
+   npm run android
    ```
+## Install these to use authentication
+```
+npm i zod react-hook-form @hookform/resolvers
+```
 
 In the output, you'll find options to open the app in a
 

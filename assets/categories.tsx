@@ -1,5 +1,5 @@
-import { PRODUCTS } from './products';
 import { Category } from './types/category';
+import { PRODUCTS } from './products';
 
 export const CATEGORIES: Category[] = [
   {
