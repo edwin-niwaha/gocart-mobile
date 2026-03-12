@@ -1,0 +1,72 @@
+gocart-mobile/
+│   │   ├── ShopStack.tsx
+│   │   ├── CartStack.tsx
+│   │   ├── OrdersStack.tsx
+│   │   └── ProfileStack.tsx
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   ├── SplashScreen.tsx
+│   │   │   ├── LoginScreen.tsx
+│   │   │   ├── RegisterScreen.tsx
+│   │   │   └── GoogleLoginScreen.tsx
+│   │   ├── home/
+│   │   │   └── HomeScreen.tsx
+│   │   ├── shop/
+│   │   │   ├── ProductListScreen.tsx
+│   │   │   ├── ProductDetailsScreen.tsx
+│   │   │   ├── CategoryProductsScreen.tsx
+│   │   │   ├── SearchScreen.tsx
+│   │   │   └── ReviewsScreen.tsx
+│   │   ├── cart/
+│   │   │   ├── CartScreen.tsx
+│   │   │   ├── CheckoutScreen.tsx
+│   │   │   ├── AddressSelectionScreen.tsx
+│   │   │   ├── ShippingMethodScreen.tsx
+│   │   │   └── ApplyCouponScreen.tsx
+│   │   ├── orders/
+│   │   │   ├── OrdersScreen.tsx
+│   │   │   └── OrderDetailsScreen.tsx
+│   │   ├── wishlist/
+│   │   │   └── WishlistScreen.tsx
+│   │   ├── notifications/
+│   │   │   └── NotificationsScreen.tsx
+│   │   └── profile/
+│   │       ├── ProfileScreen.tsx
+│   │       ├── AddressesScreen.tsx
+│   │       ├── AddAddressScreen.tsx
+│   │       └── SettingsScreen.tsx
+│   ├── store/
+│   │   ├── index.ts
+│   │   └── slices/
+│   │       ├── authSlice.ts
+│   │       ├── productSlice.ts
+│   │       ├── categorySlice.ts
+│   │       ├── cartSlice.ts
+│   │       ├── wishlistSlice.ts
+│   │       ├── orderSlice.ts
+│   │       ├── notificationSlice.ts
+│   │       └── uiSlice.ts
+│   ├── types/
+│   │   ├── auth.ts
+│   │   ├── product.ts
+│   │   ├── cart.ts
+│   │   ├── order.ts
+│   │   ├── review.ts
+│   │   ├── wishlist.ts
+│   │   ├── address.ts
+│   │   ├── coupon.ts
+│   │   ├── shipping.ts
+│   │   ├── notification.ts
+│   │   └── api.ts
+│   ├── utils/
+│   │   ├── storage.ts
+│   │   ├── currency.ts
+│   │   ├── errors.ts
+│   │   └── validators.ts
+│   └── App.tsx
+├── package.json
+├── tsconfig.json
+└── .env
+
+npx create-expo-app@latest
+npm run reset-project
