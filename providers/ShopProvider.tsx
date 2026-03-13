@@ -1,133 +1,135 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
+import { catalogApi, cartApi, orderApi, wishlistApi, notificationApi } from '@/api/services';
+import type { CartItem, Category, Notification, Order, Product, WishlistItem } from '@/types';
+import { orderSlug } from '@/utils/format';
+import { useAuth } from '@/providers/AuthProvider';
 
-import { Product, products } from '@/data/products';
-
-const STORAGE_KEY = 'gocart-shop-v2';
-
-type CartItem = {
-  productId: string;
-  quantity: number;
-};
-
-type Order = {
-  id: string;
-  createdAt: string;
-  total: number;
-  items: CartItem[];
-};
-
-type ShopContextValue = {
+type ShopContextType = {
+  loading: boolean;
   products: Product[];
-  cart: CartItem[];
-  wishlist: string[];
+  categories: Category[];
+  cartItems: CartItem[];
+  wishlistItems: WishlistItem[];
   orders: Order[];
-  hydrated: boolean;
-  cartCount: number;
-  cartTotal: number;
-  featuredProducts: Product[];
-  getProductById: (id: string) => Product | undefined;
-  addToCart: (productId: string) => void;
-  removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  toggleWishlist: (productId: string) => void;
-  clearCart: () => void;
-  checkout: () => Order | null;
+  notifications: Notification[];
+  loadCatalog: () => Promise<void>;
+  loadAuthedData: () => Promise<void>;
+  addToCart: (productId: number, quantity?: number) => Promise<void>;
+  updateCartQty: (itemId: number, quantity: number) => Promise<void>;
+  removeCartItem: (itemId: number) => Promise<void>;
+  toggleWishlist: (productId: number) => Promise<void>;
+  checkout: () => Promise<Order>;
 };
 
-const ShopContext = createContext<ShopContextValue | undefined>(undefined);
+const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
 export function ShopProvider({ children }: { children: React.ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [wishlist, setWishlist] = useState<string[]>([]);
+  const { isAuthenticated } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const saved = await AsyncStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as Pick<ShopContextValue, 'cart' | 'wishlist' | 'orders'>;
-          setCart(parsed.cart ?? []);
-          setWishlist(parsed.wishlist ?? []);
-          setOrders(parsed.orders ?? []);
-        }
-      } finally {
-        setHydrated(true);
-      }
-    })();
-  }, []);
+  const loadCatalog = async () => {
+    setLoading(true);
+    try {
+      const [nextProducts, nextCategories] = await Promise.all([catalogApi.products(), catalogApi.categories()]);
+      setProducts(nextProducts);
+      setCategories(nextCategories);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  useEffect(() => {
-    if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ cart, wishlist, orders })).catch(() => null);
-  }, [cart, wishlist, orders, hydrated]);
+  const loadAuthedData = async () => {
+    if (!isAuthenticated) {
+      setCartItems([]);
+      setWishlistItems([]);
+      setOrders([]);
+      setNotifications([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      await Promise.allSettled([cartApi.ensure(), wishlistApi.ensure()]);
+      const [nextCartItems, nextWishlistItems, nextOrders, nextNotifications] = await Promise.all([
+        cartApi.listItems(),
+        wishlistApi.listItems(),
+        orderApi.list(),
+        notificationApi.list().catch(() => []),
+      ]);
+      setCartItems(nextCartItems);
+      setWishlistItems(nextWishlistItems);
+      setOrders(nextOrders);
+      setNotifications(nextNotifications);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const getProductById = (id: string) => products.find((item) => item.id === id);
+  const addToCart = async (productId: number, quantity = 1) => {
+    await cartApi.addItem({ product_id: productId, quantity });
+    setCartItems(await cartApi.listItems());
+  };
 
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cart.reduce((sum, item) => {
-    const product = getProductById(item.productId);
-    return sum + (product?.price ?? 0) * item.quantity;
-  }, 0);
+  const updateCartQty = async (itemId: number, quantity: number) => {
+    if (quantity < 1) {
+      await cartApi.removeItem(itemId);
+    } else {
+      await cartApi.updateItem(itemId, { quantity });
+    }
+    setCartItems(await cartApi.listItems());
+  };
 
-  const value = useMemo<ShopContextValue>(
+  const removeCartItem = async (itemId: number) => {
+    await cartApi.removeItem(itemId);
+    setCartItems(await cartApi.listItems());
+  };
+
+  const toggleWishlist = async (productId: number) => {
+    const existing = wishlistItems.find((item) => item.product.id === productId);
+    if (existing) {
+      await wishlistApi.removeItem(existing.id);
+    } else {
+      await wishlistApi.addItem({ product_id: productId });
+    }
+    setWishlistItems(await wishlistApi.listItems());
+  };
+
+  const checkout = async () => {
+    if (!cartItems.length) throw new Error('Your cart is empty.');
+    const order = await orderApi.create({ slug: orderSlug(), description: 'Placed from mobile app' });
+    for (const item of cartItems) {
+      await orderApi.addItem({ order: order.id, product: item.product.id, quantity: item.quantity });
+      await cartApi.removeItem(item.id);
+    }
+    const [nextOrders, nextCartItems] = await Promise.all([orderApi.list(), cartApi.listItems()]);
+    setOrders(nextOrders);
+    setCartItems(nextCartItems);
+    return order;
+  };
+
+  const value = useMemo(
     () => ({
+      loading,
       products,
-      cart,
-      wishlist,
+      categories,
+      cartItems,
+      wishlistItems,
       orders,
-      hydrated,
-      cartCount,
-      cartTotal,
-      featuredProducts: products.filter((product) => product.featured),
-      getProductById,
-      addToCart: (productId: string) => {
-        setCart((current) => {
-          const item = current.find((entry) => entry.productId === productId);
-          if (item) {
-            return current.map((entry) =>
-              entry.productId === productId ? { ...entry, quantity: entry.quantity + 1 } : entry,
-            );
-          }
-          return [...current, { productId, quantity: 1 }];
-        });
-      },
-      removeFromCart: (productId: string) => {
-        setCart((current) => current.filter((item) => item.productId !== productId));
-      },
-      updateQuantity: (productId: string, quantity: number) => {
-        if (quantity <= 0) {
-          setCart((current) => current.filter((item) => item.productId !== productId));
-          return;
-        }
-        setCart((current) =>
-          current.map((item) => (item.productId === productId ? { ...item, quantity } : item)),
-        );
-      },
-      toggleWishlist: (productId: string) => {
-        setWishlist((current) =>
-          current.includes(productId)
-            ? current.filter((id) => id !== productId)
-            : [productId, ...current],
-        );
-      },
-      clearCart: () => setCart([]),
-      checkout: () => {
-        if (!cart.length) return null;
-        const nextOrder: Order = {
-          id: `ORD-${Date.now().toString().slice(-6)}`,
-          createdAt: new Date().toISOString(),
-          total: cartTotal,
-          items: cart,
-        };
-        setOrders((current) => [nextOrder, ...current]);
-        setCart([]);
-        return nextOrder;
-      },
+      notifications,
+      loadCatalog,
+      loadAuthedData,
+      addToCart,
+      updateCartQty,
+      removeCartItem,
+      toggleWishlist,
+      checkout,
     }),
-    [cart, wishlist, orders, hydrated, cartCount, cartTotal],
+    [loading, products, categories, cartItems, wishlistItems, orders, notifications]
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
@@ -135,8 +137,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
 export function useShop() {
   const context = useContext(ShopContext);
-  if (!context) {
-    throw new Error('useShop must be used within ShopProvider');
-  }
+  if (!context) throw new Error('useShop must be used within ShopProvider');
   return context;
 }

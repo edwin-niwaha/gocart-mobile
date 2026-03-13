@@ -1,71 +1,64 @@
-import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-
-import { ProductCard } from '@/components/ui/ProductCard';
-import { Screen } from '@/components/ui/Screen';
-import { categories } from '@/data/products';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Link } from 'expo-router';
+import { Screen } from '@/components/Screen';
+import { ProductCard } from '@/components/ProductCard';
+import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
+import { useProtectedAction } from '@/hooks/useProtectedAction';
 
 export default function HomeScreen() {
-  const { featuredProducts, products } = useShop();
+  const { products, categories, wishlistItems, loadCatalog, addToCart, toggleWishlist, loading } = useShop();
+  const protectedAction = useProtectedAction();
   const [query, setQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    loadCatalog().catch(() => undefined);
+  }, []);
+
+  const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-      return matchesQuery && matchesCategory;
+      const categoryMatch = activeCategory === 'all' || product.category?.slug === activeCategory;
+      const queryMatch = `${product.title} ${product.description ?? ''}`.toLowerCase().includes(query.toLowerCase());
+      return categoryMatch && queryMatch;
     });
-  }, [products, query, selectedCategory]);
+  }, [activeCategory, products, query]);
 
   return (
-    <Screen>
+    <Screen scroll>
       <View style={styles.hero}>
-        <View>
-          <Text style={styles.kicker}>Latest features</Text>
-          <Text style={styles.title}>Simple ecommerce app with tabs</Text>
-          <Text style={styles.subtitle}>Search, wishlist, cart persistence, checkout, and orders with less code.</Text>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={styles.heroTitle}>GoCart Mobile</Text>
+          <Text style={styles.heroText}>Production-ready Expo Router app connected to your Django API.</Text>
         </View>
-        <Pressable onPress={() => router.push('/orders')} style={styles.heroButton}>
-          <Text style={styles.heroButtonText}>My orders</Text>
-        </Pressable>
+        <Link href="/notifications" asChild>
+          <Pressable style={styles.heroButton}><Text style={styles.heroButtonText}>Alerts</Text></Pressable>
+        </Link>
       </View>
 
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search products"
-        style={styles.search}
-      />
+      <TextInput value={query} onChangeText={setQuery} placeholder="Search products" style={styles.input} />
 
-      <FlatList
-        data={['All', ...categories]}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item}
-        contentContainerStyle={styles.categoryList}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setSelectedCategory(item)}
-            style={[styles.chip, selectedCategory === item && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, selectedCategory === item && styles.chipTextActive]}>{item}</Text>
+      <View style={styles.chips}>
+        <Pressable style={[styles.chip, activeCategory === 'all' && styles.chipActive]} onPress={() => setActiveCategory('all')}><Text style={styles.chipText}>All</Text></Pressable>
+        {categories.map((category) => (
+          <Pressable key={category.id} style={[styles.chip, activeCategory === category.slug && styles.chipActive]} onPress={() => setActiveCategory(category.slug)}>
+            <Text style={styles.chipText}>{category.name}</Text>
           </Pressable>
-        )}
-      />
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Featured</Text>
-        <Text style={styles.sectionMeta}>{featuredProducts.length} trending items</Text>
+        ))}
       </View>
 
-      <View style={styles.grid}>
-        {filtered.map((product) => (
-          <View key={product.id} style={styles.gridItem}>
-            <ProductCard product={product} />
-          </View>
+      {loading && !products.length ? <ActivityIndicator /> : null}
+
+      <View style={{ gap: spacing.md }}>
+        {filteredProducts.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            wished={wishlistItems.some((item) => item.product.id === product.id)}
+            onAddToCart={() => protectedAction(() => addToCart(product.id, 1))}
+            onToggleWishlist={() => protectedAction(() => toggleWishlist(product.id))}
+          />
         ))}
       </View>
     </Screen>
@@ -73,38 +66,14 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    backgroundColor: '#111827',
-    borderRadius: 24,
-    padding: 20,
-    gap: 14,
-  },
-  kicker: { color: '#C7D2FE', fontWeight: '700', marginBottom: 4 },
-  title: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  subtitle: { color: '#D1D5DB', lineHeight: 20, marginTop: 8 },
-  heroButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  heroButtonText: { color: '#111827', fontWeight: '700' },
-  search: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-  },
-  categoryList: { gap: 10 },
-  chip: { backgroundColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
-  chipActive: { backgroundColor: '#111827' },
-  chipText: { color: '#111827', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { color: '#111827', fontSize: 18, fontWeight: '800' },
-  sectionMeta: { color: '#6B7280' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  gridItem: { width: '48%' },
+  hero: { backgroundColor: colors.primarySoft, borderRadius: 20, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: colors.text },
+  heroText: { color: colors.muted, fontSize: 14 },
+  heroButton: { backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
+  heroButtonText: { color: 'white', fontWeight: '700' },
+  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  chip: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 999 },
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  chipText: { fontWeight: '600', color: colors.text },
 });

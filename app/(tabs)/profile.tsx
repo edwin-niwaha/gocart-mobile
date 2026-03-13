@@ -1,46 +1,58 @@
-import { router } from 'expo-router';
 import React from 'react';
+import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-
-import { Screen } from '@/components/ui/Screen';
-import { useShop } from '@/providers/ShopProvider';
+import { Screen } from '@/components/Screen';
+import { colors, spacing } from '@/constants/theme';
+import { useAuth } from '@/providers/AuthProvider';
+import { fullName } from '@/utils/format';
 
 export default function ProfileScreen() {
-  const { orders, wishlist, cartCount } = useShop();
+  const { user, isAuthenticated, logout, loading } = useAuth();
 
   return (
-    <Screen>
-      <View style={styles.header}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>GC</Text></View>
-        <View>
-          <Text style={styles.name}>GoCart User</Text>
-          <Text style={styles.email}>demo@gocart.app</Text>
-        </View>
+    <Screen scroll>
+      <View style={styles.card}>
+        <Text style={styles.name}>{fullName(user?.first_name, user?.last_name, user?.username)}</Text>
+        <Text style={styles.email}>{user?.email || 'Guest user'}</Text>
       </View>
 
-      <View style={styles.stats}>
-        <View style={styles.statCard}><Text style={styles.statNumber}>{orders.length}</Text><Text style={styles.statLabel}>Orders</Text></View>
-        <View style={styles.statCard}><Text style={styles.statNumber}>{wishlist.length}</Text><Text style={styles.statLabel}>Wishlist</Text></View>
-        <View style={styles.statCard}><Text style={styles.statNumber}>{cartCount}</Text><Text style={styles.statLabel}>Cart items</Text></View>
-      </View>
+      {!isAuthenticated ? (
+        <>
+          <Link href="/auth/login" asChild>
+            <Pressable style={styles.primaryButton}><Text style={styles.primaryText}>Login</Text></Pressable>
+          </Link>
+          <Link href="/auth/register" asChild>
+            <Pressable style={styles.secondaryButton}><Text style={styles.secondaryText}>Create account</Text></Pressable>
+          </Link>
+        </>
+      ) : (
+        <>
+          <Link href="/notifications" asChild>
+            <Pressable style={styles.secondaryButton}><Text style={styles.secondaryText}>Notifications</Text></Pressable>
+          </Link>
+          <Pressable style={styles.primaryButton} onPress={() => logout()} disabled={loading}>
+            <Text style={styles.primaryText}>{loading ? 'Please wait...' : 'Logout'}</Text>
+          </Pressable>
+        </>
+      )}
 
-      <Pressable onPress={() => router.push('/orders')} style={styles.action}><Text style={styles.actionTitle}>View order history</Text><Text style={styles.actionArrow}>→</Text></Pressable>
-      <Pressable onPress={() => router.push('/(tabs)/wishlist')} style={styles.action}><Text style={styles.actionTitle}>Saved products</Text><Text style={styles.actionArrow}>→</Text></Pressable>
+      <View style={styles.featureCard}>
+        <Text style={styles.featureTitle}>Production-grade upgrades included</Text>
+        <Text style={styles.featureText}>JWT token refresh, protected checkout, synced wishlist/cart/orders, reusable API layer, and env-based backend switching.</Text>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: '#111827', borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontWeight: '800' },
-  name: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  email: { color: '#D1D5DB' },
-  stats: { flexDirection: 'row', gap: 12 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 18, padding: 18, alignItems: 'center', gap: 6 },
-  statNumber: { color: '#111827', fontSize: 24, fontWeight: '800' },
-  statLabel: { color: '#6B7280' },
-  action: { backgroundColor: '#fff', borderRadius: 20, padding: 18, flexDirection: 'row', justifyContent: 'space-between' },
-  actionTitle: { color: '#111827', fontWeight: '700' },
-  actionArrow: { color: '#6B7280', fontSize: 20 },
+  card: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: 6 },
+  name: { fontSize: 22, fontWeight: '800', color: colors.text },
+  email: { color: colors.muted },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  primaryText: { color: 'white', fontWeight: '800' },
+  secondaryButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.surface },
+  secondaryText: { color: colors.text, fontWeight: '700' },
+  featureCard: { marginTop: 4, backgroundColor: colors.primarySoft, borderRadius: 18, padding: spacing.lg, gap: 6 },
+  featureTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  featureText: { color: colors.muted },
 });
