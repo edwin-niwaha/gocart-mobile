@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthGate } from '@/components/AuthGate';
@@ -14,22 +14,42 @@ export default function CartScreen() {
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
-  }, []);
+  }, [loadAuthedData]);
 
-  const total = cartItems.reduce((sum, item) => sum + Number(item.line_total ?? Number(item.product.price) * item.quantity), 0);
+  const total = cartItems.reduce(
+    (sum, item) =>
+      sum + Number(item.line_total ?? Number(item.product.price) * item.quantity),
+    0
+  );
 
   return (
     <Screen scroll>
       <AuthGate message="Log in to add products to cart and place orders.">
-        {!cartItems.length ? <EmptyState title="Your cart is empty" subtitle="Add products from the shop to start checkout." /> : null}
+        {!cartItems.length ? (
+          <EmptyState
+            title="Your cart is empty"
+            subtitle="Add products from the shop to start checkout."
+          />
+        ) : null}
+
         {cartItems.map((item) => (
-          <CartRow key={item.id} item={item} onMinus={() => updateCartQty(item.id, item.quantity - 1)} onPlus={() => updateCartQty(item.id, item.quantity + 1)} onRemove={() => removeCartItem(item.id)} />
+          <CartRow
+            key={item.id}
+            item={item}
+            onMinus={() => updateCartQty(item.id, item.quantity - 1)}
+            onPlus={() => updateCartQty(item.id, item.quantity + 1)}
+            onRemove={() => removeCartItem(item.id)}
+          />
         ))}
+
         <View style={styles.summary}>
           <Text style={styles.summaryLabel}>Total</Text>
           <Text style={styles.summaryValue}>{money(total)}</Text>
+
           <Link href="/checkout" asChild>
-            <Pressable style={styles.button}><Text style={styles.buttonText}>Proceed to checkout</Text></Pressable>
+            <Pressable style={styles.button}>
+              <Text style={styles.buttonText}>Proceed to checkout</Text>
+            </Pressable>
           </Link>
         </View>
       </AuthGate>
@@ -38,9 +58,31 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  summary: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: 8 },
-  summaryLabel: { color: colors.muted },
-  summaryValue: { fontSize: 24, fontWeight: '800', color: colors.text },
-  button: { marginTop: 8, backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  buttonText: { color: 'white', fontWeight: '800' },
+  summary: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: 8,
+  },
+  summaryLabel: {
+    color: colors.muted,
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  button: {
+    marginTop: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: '800',
+  },
 });
