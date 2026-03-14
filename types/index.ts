@@ -36,6 +36,7 @@ export type Product = {
   stock_quantity?: number;
   max_quantity_per_order?: number;
   is_active?: boolean;
+  is_featured?: boolean;
   is_in_stock?: boolean;
   category?: Category;
 };

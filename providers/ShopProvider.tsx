@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import {
   catalogApi,
   cartApi,
@@ -47,7 +47,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const loadCatalog = async () => {
+  const loadCatalog = useCallback(async () => {
     setLoading(true);
     try {
       const [nextProducts, nextCategories] = await Promise.all([
@@ -55,14 +55,14 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         catalogApi.categories(),
       ]);
 
-      setProducts(nextProducts);
-      setCategories(nextCategories);
+      setProducts(Array.isArray(nextProducts) ? nextProducts : []);
+      setCategories(Array.isArray(nextCategories) ? nextCategories : []);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadAuthedData = async () => {
+  const loadAuthedData = useCallback(async () => {
     if (!isAuthenticated) {
       setCartItems([]);
       setWishlistItems([]);
@@ -86,37 +86,41 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
           notificationApi.list().catch(() => []),
         ]);
 
-      setCartItems(nextCartItems);
-      setWishlistItems(nextWishlistItems);
-      setOrders(nextOrders);
-      setNotifications(nextNotifications);
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
+      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+      setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
-  const addToCart = async (productId: number, quantity = 1) => {
+  const addToCart = useCallback(async (productId: number, quantity = 1) => {
     await cartApi.addItem({ product_id: productId, quantity });
-    setCartItems(await cartApi.listItems());
-  };
+    const nextCartItems = await cartApi.listItems();
+    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+  }, []);
 
-  const updateCartQty = async (itemId: number, quantity: number) => {
+  const updateCartQty = useCallback(async (itemId: number, quantity: number) => {
     if (quantity < 1) {
       await cartApi.removeItem(itemId);
     } else {
       await cartApi.updateItem(itemId, { quantity });
     }
 
-    setCartItems(await cartApi.listItems());
-  };
+    const nextCartItems = await cartApi.listItems();
+    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+  }, []);
 
-  const removeCartItem = async (itemId: number) => {
+  const removeCartItem = useCallback(async (itemId: number) => {
     await cartApi.removeItem(itemId);
-    setCartItems(await cartApi.listItems());
-  };
+    const nextCartItems = await cartApi.listItems();
+    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+  }, []);
 
-  const toggleWishlist = async (productId: number) => {
-    const existing = wishlistItems.find((item) => item.product.id === productId);
+  const toggleWishlist = useCallback(async (productId: number) => {
+    const currentWishlist = await wishlistApi.listItems();
+    const existing = currentWishlist.find((item) => item.product.id === productId);
 
     if (existing) {
       await wishlistApi.removeItem(existing.id);
@@ -124,10 +128,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       await wishlistApi.addItem({ product_id: productId });
     }
 
-    setWishlistItems(await wishlistApi.listItems());
-  };
+    const nextWishlistItems = await wishlistApi.listItems();
+    setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
+  }, []);
 
-  const checkout = async () => {
+  const checkout = useCallback(async () => {
     if (!cartItems.length) {
       throw new Error('Your cart is empty.');
     }
@@ -152,11 +157,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cartApi.listItems(),
     ]);
 
-    setOrders(nextOrders);
-    setCartItems(nextCartItems);
+    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
 
     return order;
-  };
+  }, [cartItems]);
 
   const value = useMemo(
     () => ({
@@ -175,7 +180,22 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       toggleWishlist,
       checkout,
     }),
-    [loading, products, categories, cartItems, wishlistItems, orders, notifications]
+    [
+      loading,
+      products,
+      categories,
+      cartItems,
+      wishlistItems,
+      orders,
+      notifications,
+      loadCatalog,
+      loadAuthedData,
+      addToCart,
+      updateCartQty,
+      removeCartItem,
+      toggleWishlist,
+      checkout,
+    ]
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
