@@ -43,6 +43,7 @@ export default function HomeScreen() {
     typeof params.category === 'string' ? params.category : 'all'
   );
   const [heroIndex, setHeroIndex] = useState(0);
+  const [addingProductId, setAddingProductId] = useState<number | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -153,7 +154,7 @@ export default function HomeScreen() {
   const getActiveVariants = (product: Product) =>
     product.variants?.filter((variant) => variant.is_active) || [];
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = async (product: Product) => {
     const activeVariants = getActiveVariants(product);
 
     if (!activeVariants.length) {
@@ -161,12 +162,17 @@ export default function HomeScreen() {
       return;
     }
 
-    if (activeVariants.length === 1) {
-      protectedAction(() => addToCart(activeVariants[0].id, 1));
+    if (activeVariants.length > 1) {
+      router.push(`/product/${product.slug}`);
       return;
     }
 
-    router.push(`/product/${product.slug}`);
+    try {
+      setAddingProductId(product.id);
+      await addToCart(activeVariants[0].id, 1);
+    } finally {
+      setAddingProductId(null);
+    }
   };
 
   const handleCategorySelect = (slug: string) => {
@@ -183,6 +189,8 @@ export default function HomeScreen() {
       (wishlistItem) => wishlistItem.product.id === item.id
     );
     const activeVariants = getActiveVariants(item);
+    const isAdding = addingProductId === item.id;
+    const hasSingleVariant = activeVariants.length === 1;
 
     return (
       <View style={[styles.card, { width: cardWidth }]}>
@@ -194,7 +202,11 @@ export default function HomeScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => protectedAction(() => toggleWishlist(item.id))}
+          onPress={() =>
+            protectedAction(async () => {
+              await toggleWishlist(item.id);
+            })
+          }
           style={styles.wishlistBtn}
         >
           <Ionicons
@@ -218,25 +230,40 @@ export default function HomeScreen() {
                 {activeVariants.length} options
               </Text>
             ) : null}
+            {!activeVariants.length ? (
+              <Text style={styles.outOfStockText}>Out of stock</Text>
+            ) : null}
           </View>
 
           <View style={styles.cardFooter}>
             <Pressable
-              style={styles.cartBtn}
-              onPress={() => handleAddToCart(item)}
+              style={[
+                styles.cartBtn,
+                (!activeVariants.length || isAdding) && styles.cartBtnDisabled,
+              ]}
+              disabled={!activeVariants.length || isAdding}
+              onPress={() =>
+                protectedAction(async () => {
+                  await handleAddToCart(item);
+                })
+              }
             >
-              <Ionicons
-                name={
-                  activeVariants.length > 1
-                    ? 'options-outline'
-                    : 'cart-outline'
-                }
-                size={16}
-                color="#fff"
-              />
-              <Text style={styles.cartBtnText}>
-                {activeVariants.length > 1 ? 'Select' : 'Add'}
-              </Text>
+              {isAdding ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons
+                    name={
+                      hasSingleVariant ? 'cart-outline' : 'options-outline'
+                    }
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.cartBtnText}>
+                    {hasSingleVariant ? 'Add' : 'Select'}
+                  </Text>
+                </>
+              )}
             </Pressable>
           </View>
         </View>
@@ -548,6 +575,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  outOfStockText: {
+    fontSize: 12,
+    color: '#C62828',
+    fontWeight: '600',
+  },
+
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -562,6 +595,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 12,
+    minWidth: 72,
+    justifyContent: 'center',
+  },
+
+  cartBtnDisabled: {
+    opacity: 0.65,
   },
 
   cartBtnText: {

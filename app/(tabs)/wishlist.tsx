@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { AuthGate } from '@/components/AuthGate';
 import { EmptyState } from '@/components/EmptyState';
@@ -12,19 +14,52 @@ export default function WishlistScreen() {
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
-  }, []);
+  }, [loadAuthedData]);
+
+  const getActiveVariants = (product: any) =>
+    product.variants?.filter((variant: any) => variant.is_active) || [];
+
+  const handleAddToCart = async (product: any) => {
+    const activeVariants = getActiveVariants(product);
+
+    if (!activeVariants.length) {
+      Alert.alert('Unavailable', 'This product is currently unavailable.');
+      return;
+    }
+
+    if (activeVariants.length === 1) {
+      await addToCart(activeVariants[0].id, 1);
+      return;
+    }
+
+    router.push(`/product/${product.slug}`);
+  };
 
   return (
     <Screen scroll>
       <AuthGate message="Log in to save products and sync them across devices.">
-        {!wishlistItems.length ? <EmptyState title="Wishlist is empty" subtitle="Save products here for later." /> : null}
+        {!wishlistItems.length ? (
+          <EmptyState
+            title="Wishlist is empty"
+            subtitle="Save products here for later."
+          />
+        ) : null}
+
         {wishlistItems.map((item) => (
           <ProductCard
             key={item.id}
             product={item.product}
             wished
-            onAddToCart={() => protectedAction(() => addToCart(item.product.id, 1))}
-            onToggleWishlist={() => protectedAction(() => toggleWishlist(item.product.id))}
+            onAddToCart={() =>
+              protectedAction(async () => {
+                await handleAddToCart(item.product);
+              })
+            }
+            onToggleWishlist={() =>
+              protectedAction(async () => {
+                await toggleWishlist(item.product.id);
+              })
+            }
           />
         ))}
       </AuthGate>

@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { Alert } from 'react-native';
 import {
   catalogApi,
   cartApi,
@@ -27,14 +28,48 @@ type ShopContextType = {
   notifications: Notification[];
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
-  addToCart: (variantId: number, quantity?: number) => Promise<void>;
-  updateCartQty: (itemId: number, quantity: number) => Promise<void>;
-  removeCartItem: (itemId: number) => Promise<void>;
-  toggleWishlist: (productId: number) => Promise<void>;
+  addToCart: (variantId: number, quantity?: number) => Promise<boolean>;
+  updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
+  removeCartItem: (itemId: number) => Promise<boolean>;
+  toggleWishlist: (productId: number) => Promise<boolean>;
   checkout: () => Promise<Order>;
 };
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
+
+function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
+  const data = error?.response?.data;
+
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  if (Array.isArray(data) && data.length) {
+    return String(data[0]);
+  }
+
+  if (data?.detail) {
+    return String(data.detail);
+  }
+
+  if (data?.quantity?.[0]) {
+    return String(data.quantity[0]);
+  }
+
+  if (data?.variant_id?.[0]) {
+    return String(data.variant_id[0]);
+  }
+
+  if (data?.non_field_errors?.[0]) {
+    return String(data.non_field_errors[0]);
+  }
+
+  if (typeof error?.message === 'string') {
+    return error.message;
+  }
+
+  return fallback;
+}
 
 export function ShopProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -57,6 +92,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       setProducts(Array.isArray(nextProducts) ? nextProducts : []);
       setCategories(Array.isArray(nextCategories) ? nextCategories : []);
+    } catch (error) {
+      console.log('loadCatalog error:', error);
+      setProducts([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -73,10 +112,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
     setLoading(true);
     try {
-      await Promise.allSettled([
-        cartApi.ensure(),
-        wishlistApi.ensure(),
-      ]);
+      await Promise.allSettled([cartApi.ensure(), wishlistApi.ensure()]);
 
       const [nextCartItems, nextWishlistItems, nextOrders, nextNotifications] =
         await Promise.all([
@@ -90,51 +126,107 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       setOrders(Array.isArray(nextOrders) ? nextOrders : []);
       setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
+    } catch (error) {
+      console.log('loadAuthedData error:', error);
+      setCartItems([]);
+      setWishlistItems([]);
+      setOrders([]);
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
   }, [isAuthenticated]);
 
   const addToCart = useCallback(async (variantId: number, quantity = 1) => {
-    await cartApi.addItem({
-      product_variant_id: variantId,
-      quantity,
-    });
+    try {
+      await cartApi.addItem({
+        variant_id: variantId,
+        quantity,
+      });
 
-    const nextCartItems = await cartApi.listItems();
-    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      const nextCartItems = await cartApi.listItems();
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
+      Alert.alert('Success', 'Product added to cart.');
+      return true;
+    } catch (error: any) {
+      console.log('addToCart error:', error?.response?.data || error.message);
+
+      Alert.alert(
+        'Unable to add to cart',
+        getApiErrorMessage(error, 'Failed to add item to cart.')
+      );
+
+      return false;
+    }
   }, []);
 
   const updateCartQty = useCallback(async (itemId: number, quantity: number) => {
-    if (quantity < 1) {
-      await cartApi.removeItem(itemId);
-    } else {
-      await cartApi.updateItem(itemId, { quantity });
-    }
+    try {
+      if (quantity < 1) {
+        await cartApi.removeItem(itemId);
+      } else {
+        await cartApi.updateItem(itemId, { quantity });
+      }
 
-    const nextCartItems = await cartApi.listItems();
-    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      const nextCartItems = await cartApi.listItems();
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      return true;
+    } catch (error: any) {
+      console.log('updateCartQty error:', error?.response?.data || error.message);
+
+      Alert.alert(
+        'Unable to update cart',
+        getApiErrorMessage(error, 'Failed to update cart item.')
+      );
+
+      return false;
+    }
   }, []);
 
   const removeCartItem = useCallback(async (itemId: number) => {
-    await cartApi.removeItem(itemId);
+    try {
+      await cartApi.removeItem(itemId);
 
-    const nextCartItems = await cartApi.listItems();
-    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      const nextCartItems = await cartApi.listItems();
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      return true;
+    } catch (error: any) {
+      console.log('removeCartItem error:', error?.response?.data || error.message);
+
+      Alert.alert(
+        'Unable to remove item',
+        getApiErrorMessage(error, 'Failed to remove item from cart.')
+      );
+
+      return false;
+    }
   }, []);
 
   const toggleWishlist = useCallback(async (productId: number) => {
-    const currentWishlist = await wishlistApi.listItems();
-    const existing = currentWishlist.find((item) => item.product.id === productId);
+    try {
+      const currentWishlist = await wishlistApi.listItems();
+      const existing = currentWishlist.find((item) => item.product.id === productId);
 
-    if (existing) {
-      await wishlistApi.removeItem(existing.id);
-    } else {
-      await wishlistApi.addItem({ product_id: productId });
+      if (existing) {
+        await wishlistApi.removeItem(existing.id);
+      } else {
+        await wishlistApi.addItem({ product_id: productId });
+      }
+
+      const nextWishlistItems = await wishlistApi.listItems();
+      setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
+      return true;
+    } catch (error: any) {
+      console.log('toggleWishlist error:', error?.response?.data || error.message);
+
+      Alert.alert(
+        'Wishlist error',
+        getApiErrorMessage(error, 'Failed to update wishlist.')
+      );
+
+      return false;
     }
-
-    const nextWishlistItems = await wishlistApi.listItems();
-    setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
   }, []);
 
   const checkout = useCallback(async () => {
