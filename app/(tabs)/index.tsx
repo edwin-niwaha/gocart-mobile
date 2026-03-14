@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Image,
@@ -12,11 +13,12 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
+import type { Product } from '@/types';
 
 const FALLBACK_HERO = 'https://via.placeholder.com/1200x600.png?text=GoCart+Mobile';
 const FALLBACK_PRODUCT = 'https://via.placeholder.com/400x300.png?text=Product';
@@ -32,11 +34,14 @@ export default function HomeScreen() {
     loading,
   } = useShop();
 
+  const params = useLocalSearchParams<{ category?: string }>();
   const protectedAction = useProtectedAction();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState(
+    typeof params.category === 'string' ? params.category : 'all'
+  );
   const [heroIndex, setHeroIndex] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -45,11 +50,20 @@ export default function HomeScreen() {
   const numColumns = isTablet ? 3 : 2;
   const gap = 12;
   const horizontalPadding = spacing.lg * 2;
-  const cardWidth = (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
+  const cardWidth =
+    (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
 
   useEffect(() => {
     loadCatalog().catch(() => undefined);
-  }, []);
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    if (typeof params.category === 'string' && params.category.trim()) {
+      setActiveCategory(params.category);
+    } else {
+      setActiveCategory('all');
+    }
+  }, [params.category]);
 
   const categoryOptions = useMemo(
     () => [
@@ -64,7 +78,11 @@ export default function HomeScreen() {
 
   const heroSlides = useMemo(() => {
     const featuredImages = products
-      .filter((product) => product.is_featured && (product.hero_image || product.image_urls?.[0]))
+      .filter(
+        (product) =>
+          product.is_featured &&
+          (product.hero_image || product.image_urls?.[0])
+      )
       .map((product) => product.hero_image || product.image_urls?.[0])
       .filter(Boolean)
       .slice(0, 6) as string[];
@@ -99,7 +117,7 @@ export default function HomeScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [heroIndex]);
+  }, [heroIndex, fadeAnim]);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -118,14 +136,53 @@ export default function HomeScreen() {
     });
   }, [products, activeCategory, query]);
 
+  const activeCategoryName = useMemo(() => {
+    if (activeCategory === 'all') return 'All Products';
+    return (
+      categories.find((category) => category.slug === activeCategory)?.name ||
+      'Products'
+    );
+  }, [categories, activeCategory]);
+
   const formatPrice = (price: string | number) =>
     `UGX ${Number(price || 0).toLocaleString()}`;
 
-  const getImage = (item: any) =>
+  const getImage = (item: Product) =>
     item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
 
-  const renderProduct = ({ item }: { item: any }) => {
-    const wished = wishlistItems.some((wishlistItem) => wishlistItem.product.id === item.id);
+  const getActiveVariants = (product: Product) =>
+    product.variants?.filter((variant) => variant.is_active) || [];
+
+  const handleAddToCart = (product: Product) => {
+    const activeVariants = getActiveVariants(product);
+
+    if (!activeVariants.length) {
+      Alert.alert('Unavailable', 'This product is currently unavailable.');
+      return;
+    }
+
+    if (activeVariants.length === 1) {
+      protectedAction(() => addToCart(activeVariants[0].id, 1));
+      return;
+    }
+
+    router.push(`/product/${product.slug}`);
+  };
+
+  const handleCategorySelect = (slug: string) => {
+    setActiveCategory(slug);
+
+    router.replace({
+      pathname: '/',
+      params: slug === 'all' ? {} : { category: slug },
+    });
+  };
+
+  const renderProduct = ({ item }: { item: Product }) => {
+    const wished = wishlistItems.some(
+      (wishlistItem) => wishlistItem.product.id === item.id
+    );
+    const activeVariants = getActiveVariants(item);
 
     return (
       <View style={[styles.card, { width: cardWidth }]}>
@@ -154,15 +211,32 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          <View style={styles.cardFooter}>
-            <Text style={styles.cardPrice}>{formatPrice(item.price)}</Text>
+          <View style={styles.cardMeta}>
+            <Text style={styles.cardPrice}>{formatPrice(item.base_price)}</Text>
+            {activeVariants.length > 1 ? (
+              <Text style={styles.variantHint}>
+                {activeVariants.length} options
+              </Text>
+            ) : null}
+          </View>
 
+          <View style={styles.cardFooter}>
             <Pressable
               style={styles.cartBtn}
-              onPress={() => protectedAction(() => addToCart(item.id, 1))}
+              onPress={() => handleAddToCart(item)}
             >
-              <Ionicons name="cart-outline" size={16} color="#fff" />
-              <Text style={styles.cartBtnText}>Add</Text>
+              <Ionicons
+                name={
+                  activeVariants.length > 1
+                    ? 'options-outline'
+                    : 'cart-outline'
+                }
+                size={16}
+                color="#fff"
+              />
+              <Text style={styles.cartBtnText}>
+                {activeVariants.length > 1 ? 'Select' : 'Add'}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -216,6 +290,13 @@ export default function HomeScreen() {
           style={styles.input}
         />
 
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{activeCategoryName}</Text>
+          <Text style={styles.sectionSubtitle}>
+            {filteredProducts.length} item{filteredProducts.length === 1 ? '' : 's'}
+          </Text>
+        </View>
+
         <View style={styles.chips}>
           {categoryOptions.map((category) => {
             const active = activeCategory === category.slug;
@@ -223,7 +304,7 @@ export default function HomeScreen() {
             return (
               <Pressable
                 key={category.slug}
-                onPress={() => setActiveCategory(category.slug)}
+                onPress={() => handleCategorySelect(category.slug)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
@@ -244,7 +325,7 @@ export default function HomeScreen() {
           numColumns={numColumns}
           scrollEnabled={false}
           keyExtractor={(item) => String(item.id)}
-          columnWrapperStyle={styles.row}
+          columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
           contentContainerStyle={styles.productList}
           renderItem={renderProduct}
           ListEmptyComponent={
@@ -356,6 +437,22 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
+  sectionHeader: {
+    gap: 2,
+    marginTop: 4,
+  },
+
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  sectionSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -435,18 +532,26 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+  cardMeta: {
+    gap: 4,
   },
 
   cardPrice: {
-    flex: 1,
     fontSize: 14,
     fontWeight: '800',
     color: colors.primary,
+  },
+
+  variantHint: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
+  },
+
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
 
   cartBtn: {

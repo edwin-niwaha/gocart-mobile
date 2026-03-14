@@ -27,7 +27,7 @@ type ShopContextType = {
   notifications: Notification[];
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
-  addToCart: (productId: number, quantity?: number) => Promise<void>;
+  addToCart: (variantId: number, quantity?: number) => Promise<void>;
   updateCartQty: (itemId: number, quantity: number) => Promise<void>;
   removeCartItem: (itemId: number) => Promise<void>;
   toggleWishlist: (productId: number) => Promise<void>;
@@ -95,8 +95,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated]);
 
-  const addToCart = useCallback(async (productId: number, quantity = 1) => {
-    await cartApi.addItem({ product_id: productId, quantity });
+  const addToCart = useCallback(async (variantId: number, quantity = 1) => {
+    await cartApi.addItem({
+      product_variant_id: variantId,
+      quantity,
+    });
+
     const nextCartItems = await cartApi.listItems();
     setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
   }, []);
@@ -114,6 +118,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
   const removeCartItem = useCallback(async (itemId: number) => {
     await cartApi.removeItem(itemId);
+
     const nextCartItems = await cartApi.listItems();
     setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
   }, []);
@@ -146,6 +151,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       await orderApi.addItem({
         order: order.id,
         product: item.product.id,
+        variant: item.variant.id,
         quantity: item.quantity,
       });
 

@@ -1,4 +1,7 @@
-export type Tokens = { access: string; refresh: string };
+export type Tokens = {
+  access: string;
+  refresh: string;
+};
 
 export type User = {
   id: number;
@@ -21,29 +24,47 @@ export type Category = {
   id: number;
   name: string;
   slug: string;
-  image_url?: string;
+  image_url?: string | null;
   is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ProductVariant = {
+  id: number;
+  name: string;
+  sku: string;
+  price: string;
+  stock_quantity: number;
+  max_quantity_per_order?: number | null;
+  is_active: boolean;
+  sort_order: number;
+  is_in_stock: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type Product = {
   id: number;
   title: string;
   slug: string;
-  description?: string;
-  hero_image?: string;
-  image_urls?: string[];
-  price: string | number;
-  stock_quantity?: number;
-  max_quantity_per_order?: number;
-  is_active?: boolean;
-  is_featured?: boolean;
-  is_in_stock?: boolean;
-  category?: Category;
+  description: string;
+  hero_image?: string | null;
+  image_urls: string[];
+  is_active: boolean;
+  is_featured: boolean;
+  base_price: string;
+  is_in_stock: boolean;
+  category?: Category | null;
+  variants: ProductVariant[];
+  created_at: string;
+  updated_at: string;
 };
 
 export type CartItem = {
   id: number;
   product: Product;
+  variant: ProductVariant;
   quantity: number;
   unit_price?: string | number;
   line_total?: string | number;
@@ -70,8 +91,10 @@ export type Wishlist = {
 export type OrderItem = {
   id: number;
   product: number;
+  variant?: number;
   product_title?: string;
   product_slug?: string;
+  variant_name?: string;
   quantity: number;
   unit_price?: string | number;
   line_total?: string | number;

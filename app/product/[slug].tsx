@@ -16,8 +16,10 @@ import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
 import { useShop } from '@/providers/ShopProvider';
-import { Product } from '@/types';
+import { Product, ProductVariant } from '@/types';
 import { money } from '@/utils/format';
+
+const FALLBACK_PRODUCT = 'https://via.placeholder.com/800x600.png?text=Product';
 
 export default function ProductDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -25,6 +27,7 @@ export default function ProductDetailScreen() {
   const protectedAction = useProtectedAction();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,15 +43,52 @@ export default function ProductDetailScreen() {
     })();
   }, [slug]);
 
+  useEffect(() => {
+    if (!product?.variants?.length) {
+      setSelectedVariant(null);
+      return;
+    }
+
+    const firstAvailable =
+      product.variants.find((variant) => variant.is_active && variant.is_in_stock) ||
+      product.variants.find((variant) => variant.is_active) ||
+      product.variants[0];
+
+    setSelectedVariant(firstAvailable);
+  }, [product]);
+
   const wished = useMemo(
     () => wishlistItems.some((item) => item.product.id === product?.id),
     [wishlistItems, product]
   );
 
+  const activeVariants = useMemo(
+    () => product?.variants?.filter((variant) => variant.is_active) || [],
+    [product]
+  );
+
   const imageUri =
     product?.hero_image ||
     product?.image_urls?.[0] ||
-    'https://via.placeholder.com/800x600.png?text=Product';
+    FALLBACK_PRODUCT;
+
+  const displayPrice = selectedVariant?.price || product?.base_price || '0';
+  const isOutOfStock = selectedVariant ? !selectedVariant.is_in_stock : !product?.is_in_stock;
+  const stockText = isOutOfStock ? 'Out of stock' : 'In stock';
+
+  const handleAddToCart = () => {
+    if (!selectedVariant) {
+      Alert.alert('Select an option', 'Please choose a size or volume first.');
+      return;
+    }
+
+    if (!selectedVariant.is_in_stock) {
+      Alert.alert('Out of stock', 'This option is currently unavailable.');
+      return;
+    }
+
+    protectedAction(() => addToCart(selectedVariant.id, 1));
+  };
 
   if (loading) {
     return (
@@ -98,28 +138,55 @@ export default function ProductDetailScreen() {
             <View
               style={[
                 styles.stockBadge,
-                product.is_in_stock === false ? styles.stockOut : styles.stockIn,
+                isOutOfStock ? styles.stockOut : styles.stockIn,
               ]}
             >
               <Text
                 style={[
                   styles.stockText,
-                  product.is_in_stock === false ? styles.stockTextOut : styles.stockTextIn,
+                  isOutOfStock ? styles.stockTextOut : styles.stockTextIn,
                 ]}
               >
-                {product.is_in_stock === false ? 'Out of stock' : 'In stock'}
+                {stockText}
               </Text>
             </View>
           </View>
 
-          <Text style={styles.price}>{money(product.price)}</Text>
+          <Text style={styles.price}>{money(displayPrice)}</Text>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.desc}>
-              {product.description || 'No description provided.'}
-            </Text>
-          </View>
+          {activeVariants.length ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Choose option</Text>
+
+              <View style={styles.variantWrap}>
+                {activeVariants.map((variant) => {
+                  const active = selectedVariant?.id === variant.id;
+                  const disabled = !variant.is_in_stock;
+
+                  return (
+                    <Pressable
+                      key={variant.id}
+                      onPress={() => setSelectedVariant(variant)}
+                      style={[
+                        styles.variantChip,
+                        active && styles.variantChipActive,
+                        disabled && styles.variantChipDisabled,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.variantChipText,
+                          active && styles.variantChipTextActive,
+                        ]}
+                      >
+                        {variant.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.metaCard}>
             <View style={styles.metaRow}>
@@ -128,32 +195,52 @@ export default function ProductDetailScreen() {
             </View>
 
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Availability</Text>
+              <Text style={styles.metaLabel}>Selected option</Text>
               <Text style={styles.metaValue}>
-                {product.is_in_stock === false ? 'Unavailable' : 'Available'}
+                {selectedVariant?.name || 'Default'}
               </Text>
             </View>
 
-            {typeof product.stock_quantity === 'number' ? (
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Availability</Text>
+              <Text style={styles.metaValue}>
+                {isOutOfStock ? 'Unavailable' : 'Available'}
+              </Text>
+            </View>
+
+            {typeof selectedVariant?.stock_quantity === 'number' ? (
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Stock</Text>
-                <Text style={styles.metaValue}>{product.stock_quantity}</Text>
+                <Text style={styles.metaValue}>{selectedVariant.stock_quantity}</Text>
+              </View>
+            ) : null}
+
+            {selectedVariant?.max_quantity_per_order ? (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Max per order</Text>
+                <Text style={styles.metaValue}>
+                  {selectedVariant.max_quantity_per_order}
+                </Text>
               </View>
             ) : null}
           </View>
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.desc}>
+              {product.description || 'No description provided.'}
+            </Text>
+          </View>
+
           <View style={styles.actions}>
             <Pressable
-              style={[
-                styles.button,
-                product.is_in_stock === false && styles.buttonDisabled,
-              ]}
-              disabled={product.is_in_stock === false}
-              onPress={() => protectedAction(() => addToCart(product.id, 1))}
+              style={[styles.button, isOutOfStock && styles.buttonDisabled]}
+              disabled={isOutOfStock}
+              onPress={handleAddToCart}
             >
               <Ionicons name="cart-outline" size={18} color="#fff" />
               <Text style={styles.buttonText}>
-                {product.is_in_stock === false ? 'Out of stock' : 'Add to cart'}
+                {isOutOfStock ? 'Out of stock' : 'Add to cart'}
               </Text>
             </Pressable>
 
@@ -293,6 +380,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: colors.text,
+  },
+
+  variantWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+
+  variantChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+
+  variantChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+
+  variantChipDisabled: {
+    opacity: 0.55,
+  },
+
+  variantChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+
+  variantChipTextActive: {
+    color: colors.primary,
   },
 
   metaCard: {

@@ -9,6 +9,7 @@ import type {
   Order,
   OrderItem,
   Product,
+  ProductVariant,
   User,
   Wishlist,
   WishlistItem,
@@ -75,7 +76,7 @@ export const cartApi = {
     return normalizeList(data);
   },
 
-  async addItem(payload: { product_id: number; quantity: number }) {
+  async addItem(payload: { product_variant_id: number; quantity: number }) {
     const { data } = await api.post<CartItem>('/cart-items/', payload);
     return data;
   },
@@ -128,7 +129,12 @@ export const orderApi = {
     return data;
   },
 
-  async addItem(payload: { order: number; product: number; quantity: number }) {
+  async addItem(payload: {
+    order: number;
+    product: number;
+    variant: number;
+    quantity: number;
+  }) {
     const { data } = await api.post<OrderItem>('/order-items/', payload);
     return data;
   },

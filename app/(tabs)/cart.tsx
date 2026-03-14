@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthGate } from '@/components/AuthGate';
@@ -16,11 +16,16 @@ export default function CartScreen() {
     loadAuthedData().catch(() => undefined);
   }, [loadAuthedData]);
 
-  const total = cartItems.reduce(
-    (sum, item) =>
-      sum + Number(item.line_total ?? Number(item.product.price) * item.quantity),
-    0
-  );
+  const total = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      const lineTotal =
+        item.line_total != null
+          ? Number(item.line_total)
+          : Number(item.variant?.price || 0) * item.quantity;
+
+      return sum + lineTotal;
+    }, 0);
+  }, [cartItems]);
 
   return (
     <Screen scroll>
@@ -42,16 +47,18 @@ export default function CartScreen() {
           />
         ))}
 
-        <View style={styles.summary}>
-          <Text style={styles.summaryLabel}>Total</Text>
-          <Text style={styles.summaryValue}>{money(total)}</Text>
+        {!!cartItems.length ? (
+          <View style={styles.summary}>
+            <Text style={styles.summaryLabel}>Total</Text>
+            <Text style={styles.summaryValue}>{money(total)}</Text>
 
-          <Link href="/checkout" asChild>
-            <Pressable style={styles.button}>
-              <Text style={styles.buttonText}>Proceed to checkout</Text>
-            </Pressable>
-          </Link>
-        </View>
+            <Link href="/checkout" asChild>
+              <Pressable style={styles.button}>
+                <Text style={styles.buttonText}>Proceed to checkout</Text>
+              </Pressable>
+            </Link>
+          </View>
+        ) : null}
       </AuthGate>
     </Screen>
   );
