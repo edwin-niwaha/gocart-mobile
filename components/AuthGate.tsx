@@ -1,21 +1,40 @@
 import React from 'react';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
 import { colors, spacing } from '@/constants/theme';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/providers/AuthProvider';
 
-export function AuthGate({ children, message }: { children: React.ReactNode; message: string }) {
+type AuthGateProps = {
+  children: React.ReactNode;
+  message?: string;
+  loginLabel?: string;
+  redirectTo?: string;
+};
+
+export function AuthGate({
+  children,
+  message = 'Please log in to continue.',
+  loginLabel = 'Go to login',
+  redirectTo = '/auth/login',
+}: AuthGateProps) {
   const { isAuthenticated } = useAuth();
 
-  if (isAuthenticated) return <>{children}</>;
+  if (isAuthenticated) {
+    return <>{children}</>;
+  }
 
   return (
-    <View style={styles.wrap}>
-      <EmptyState title="Login required" subtitle={message} />
-      <Link href="/auth/login" asChild>
+    <View style={styles.container}>
+      <EmptyState
+        title="Login required"
+        subtitle={message}
+      />
+
+      <Link href={redirectTo as any} asChild>
         <Pressable style={styles.button}>
-          <Text style={styles.buttonText}>Go to login</Text>
+          <Text style={styles.buttonText}>{loginLabel}</Text>
         </Pressable>
       </Link>
     </View>
@@ -23,7 +42,21 @@ export function AuthGate({ children, message }: { children: React.ReactNode; mes
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.md },
-  button: { backgroundColor: colors.primary, paddingVertical: 14, alignItems: 'center', borderRadius: 14 },
-  buttonText: { color: 'white', fontWeight: '700' },
+  container: {
+    gap: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+
+  button: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+
+  buttonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 15,
+  },
 });

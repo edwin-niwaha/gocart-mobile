@@ -284,10 +284,11 @@ export default function HomeScreen() {
           <View style={styles.heroContent}>
             <Text style={styles.badge}>Featured Picks</Text>
             <Text style={[styles.heroTitle, { fontSize: isTablet ? 34 : 27 }]}>
-              GoCart Mobile
+              Shop smarter, live easier
             </Text>
             <Text style={styles.heroText}>
-              Shop quality products with fast delivery and secure checkout.
+              Discover quality products, trusted prices, and smooth delivery at
+              your fingertips.
             </Text>
 
             <Link href="/notifications" asChild>

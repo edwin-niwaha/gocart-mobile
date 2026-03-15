@@ -7,14 +7,18 @@ import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
+import { useAuth } from '@/providers/AuthProvider'; // adjust to your auth hook
 import { money } from '@/utils/format';
 
 export default function CartScreen() {
   const { cartItems, loadAuthedData, updateCartQty, removeCartItem } = useShop();
+  const { user, isAuthenticated } = useAuth(); // adjust names to your auth provider
 
   useEffect(() => {
-    loadAuthedData().catch(() => undefined);
-  }, [loadAuthedData]);
+    if (isAuthenticated && user) {
+      loadAuthedData().catch(() => undefined);
+    }
+  }, [isAuthenticated, user, loadAuthedData]);
 
   const total = useMemo(() => {
     return cartItems.reduce((sum, item) => {
@@ -29,7 +33,7 @@ export default function CartScreen() {
 
   return (
     <Screen scroll>
-      <AuthGate message="Log in to add products to cart and place orders.">
+      <AuthGate message="Log in to view your cart and place orders.">
         {!cartItems.length ? (
           <EmptyState
             title="Your cart is empty"
@@ -47,7 +51,7 @@ export default function CartScreen() {
           />
         ))}
 
-        {!!cartItems.length ? (
+        {!!cartItems.length && (
           <View style={styles.summary}>
             <Text style={styles.summaryLabel}>Total</Text>
             <Text style={styles.summaryValue}>{money(total)}</Text>
@@ -58,7 +62,7 @@ export default function CartScreen() {
               </Pressable>
             </Link>
           </View>
-        ) : null}
+        )}
       </AuthGate>
     </Screen>
   );

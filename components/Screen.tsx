@@ -1,12 +1,15 @@
 import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '@/constants/theme';
 
 export function Screen({ children, scroll = false }: { children: React.ReactNode; scroll?: boolean }) {
   if (scroll) {
     return (
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll}>{children}</ScrollView>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          {children}
+        </ScrollView>
       </SafeAreaView>
     );
   }
