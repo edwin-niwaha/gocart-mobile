@@ -118,3 +118,22 @@ export type Notification = {
   is_read?: boolean;
   created_at?: string;
 };
+
+export type Review = {
+  id: number;
+  user: {
+    id: number;
+    email?: string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  user_id: number;
+  product: number;
+  product_title: string;
+  product_slug: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+};

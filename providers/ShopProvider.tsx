@@ -6,6 +6,7 @@ import {
   orderApi,
   wishlistApi,
   notificationApi,
+  reviewApi,
 } from '@/api/services';
 import type {
   CartItem,
@@ -14,6 +15,7 @@ import type {
   Order,
   Product,
   WishlistItem,
+  Review,
 } from '@/types';
 import { orderSlug } from '@/utils/format';
 import { useAuth } from '@/providers/AuthProvider';
@@ -25,6 +27,7 @@ type ShopContextType = {
   cartItems: CartItem[];
   wishlistItems: WishlistItem[];
   orders: Order[];
+  reviews: Review[];
   notifications: Notification[];
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
@@ -40,33 +43,13 @@ const ShopContext = createContext<ShopContextType | undefined>(undefined);
 function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
   const data = error?.response?.data;
 
-  if (typeof data === 'string') {
-    return data;
-  }
-
-  if (Array.isArray(data) && data.length) {
-    return String(data[0]);
-  }
-
-  if (data?.detail) {
-    return String(data.detail);
-  }
-
-  if (data?.quantity?.[0]) {
-    return String(data.quantity[0]);
-  }
-
-  if (data?.variant_id?.[0]) {
-    return String(data.variant_id[0]);
-  }
-
-  if (data?.non_field_errors?.[0]) {
-    return String(data.non_field_errors[0]);
-  }
-
-  if (typeof error?.message === 'string') {
-    return error.message;
-  }
+  if (typeof data === 'string') return data;
+  if (Array.isArray(data) && data.length) return String(data[0]);
+  if (data?.detail) return String(data.detail);
+  if (data?.quantity?.[0]) return String(data.quantity[0]);
+  if (data?.variant_id?.[0]) return String(data.variant_id[0]);
+  if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
+  if (typeof error?.message === 'string') return error.message;
 
   return fallback;
 }
@@ -80,10 +63,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
+
     try {
       const [nextProducts, nextCategories] = await Promise.all([
         catalogApi.products(),
@@ -106,31 +91,42 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setCartItems([]);
       setWishlistItems([]);
       setOrders([]);
+      setReviews([]);
       setNotifications([]);
       return;
     }
 
     setLoading(true);
+
     try {
       await Promise.allSettled([cartApi.ensure(), wishlistApi.ensure()]);
 
-      const [nextCartItems, nextWishlistItems, nextOrders, nextNotifications] =
-        await Promise.all([
-          cartApi.listItems(),
-          wishlistApi.listItems(),
-          orderApi.list(),
-          notificationApi.list().catch(() => []),
-        ]);
+      const [
+        nextCartItems,
+        nextWishlistItems,
+        nextOrders,
+        nextReviews,
+        nextNotifications,
+      ] = await Promise.all([
+        cartApi.listItems(),
+        wishlistApi.listItems(),
+        orderApi.list(),
+        reviewApi.listMine().catch(() => []),
+        notificationApi.list().catch(() => []),
+      ]);
 
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+      setReviews(Array.isArray(nextReviews) ? nextReviews : []);
       setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
     } catch (error) {
       console.log('loadAuthedData error:', error);
+
       setCartItems([]);
       setWishlistItems([]);
       setOrders([]);
+      setReviews([]);
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -171,6 +167,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
       return true;
     } catch (error: any) {
       console.log('updateCartQty error:', error?.response?.data || error.message);
@@ -190,6 +187,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
       return true;
     } catch (error: any) {
       console.log('removeCartItem error:', error?.response?.data || error.message);
@@ -216,6 +214,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextWishlistItems = await wishlistApi.listItems();
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
+
       return true;
     } catch (error: any) {
       console.log('toggleWishlist error:', error?.response?.data || error.message);
@@ -269,6 +268,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cartItems,
       wishlistItems,
       orders,
+      reviews,
       notifications,
       loadCatalog,
       loadAuthedData,
@@ -285,6 +285,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cartItems,
       wishlistItems,
       orders,
+      reviews,
       notifications,
       loadCatalog,
       loadAuthedData,

@@ -1,13 +1,40 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '@/constants/theme';
 
-export function Screen({ children, scroll = false }: { children: React.ReactNode; scroll?: boolean }) {
+type ScreenProps = {
+  children: React.ReactNode;
+  scroll?: boolean;
+  noPadding?: boolean;
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  style?: StyleProp<ViewStyle>;
+};
+
+export function Screen({
+  children,
+  scroll = false,
+  noPadding = false,
+  contentContainerStyle,
+  style,
+}: ScreenProps) {
   if (scroll) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, style]}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.baseContent,
+            !noPadding && styles.paddedContent,
+            contentContainerStyle,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           {children}
         </ScrollView>
       </SafeAreaView>
@@ -15,13 +42,30 @@ export function Screen({ children, scroll = false }: { children: React.ReactNode
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.scroll}>{children}</View>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, style]}>
+      <View
+        style={[
+          styles.baseContent,
+          !noPadding && styles.paddedContent,
+          contentContainerStyle,
+        ]}
+      >
+        {children}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.md, gap: spacing.md, flexGrow: 1 },
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  baseContent: {
+    flexGrow: 1,
+  },
+  paddedContent: {
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
 });

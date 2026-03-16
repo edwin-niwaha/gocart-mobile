@@ -288,3 +288,10 @@ export const notificationApi = {
     }
   },
 };
+
+export const reviewApi = {
+  listMine: async () => {
+    const { data } = await api.get('/reviews/?mine=true');
+    return Array.isArray(data) ? data : [];
+  },
+};
