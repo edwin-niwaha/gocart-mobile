@@ -292,6 +292,62 @@ export const notificationApi = {
 export const reviewApi = {
   listMine: async () => {
     const { data } = await api.get('/reviews/?mine=true');
-    return Array.isArray(data) ? data : [];
+
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.results)) return data.results;
+
+    return [];
+  },
+};
+
+
+const toList = (data: any) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+};
+
+export const addressApi = {
+  list: async () => {
+    const { data } = await api.get('/addresses/');
+    return toList(data);
+  },
+
+  create: async (payload: {
+    label: string;
+    address_line1: string;
+    address_line2?: string;
+    city: string;
+    state?: string;
+    postal_code: string;
+    country: string;
+    phone_number?: string;
+    is_default?: boolean;
+  }) => {
+    const { data } = await api.post('/addresses/', payload);
+    return data;
+  },
+
+  update: async (
+    id: number,
+    payload: Partial<{
+      label: string;
+      address_line1: string;
+      address_line2: string;
+      city: string;
+      state: string;
+      postal_code: string;
+      country: string;
+      phone_number: string;
+      is_default: boolean;
+    }>
+  ) => {
+    const { data } = await api.patch(`/addresses/${id}/`, payload);
+    return data;
+  },
+
+  remove: async (id: number) => {
+    const { data } = await api.delete(`/addresses/${id}/`);
+    return data;
   },
 };

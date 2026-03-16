@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import {
+  addressApi,
   catalogApi,
   cartApi,
   orderApi,
@@ -11,11 +12,13 @@ import {
 import type {
   CartItem,
   Category,
+  CustomerAddress,
+  CustomerAddressPayload,
   Notification,
   Order,
   Product,
-  WishlistItem,
   Review,
+  WishlistItem,
 } from '@/types';
 import { orderSlug } from '@/utils/format';
 import { useAuth } from '@/providers/AuthProvider';
@@ -28,9 +31,13 @@ type ShopContextType = {
   wishlistItems: WishlistItem[];
   orders: Order[];
   reviews: Review[];
+  addresses: CustomerAddress[];
   notifications: Notification[];
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
+  addAddress: (payload: CustomerAddressPayload) => Promise<boolean>;
+  updateAddress: (id: number, payload: Partial<CustomerAddressPayload>) => Promise<boolean>;
+  removeAddress: (id: number) => Promise<boolean>;
   addToCart: (variantId: number, quantity?: number) => Promise<boolean>;
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
@@ -48,6 +55,7 @@ function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
   if (data?.detail) return String(data.detail);
   if (data?.quantity?.[0]) return String(data.quantity[0]);
   if (data?.variant_id?.[0]) return String(data.variant_id[0]);
+  if (data?.postal_code?.[0]) return String(data.postal_code[0]);
   if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
   if (typeof error?.message === 'string') return error.message;
 
@@ -64,11 +72,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
-
     try {
       const [nextProducts, nextCategories] = await Promise.all([
         catalogApi.products(),
@@ -92,12 +100,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setWishlistItems([]);
       setOrders([]);
       setReviews([]);
+      setAddresses([]);
       setNotifications([]);
       return;
     }
 
     setLoading(true);
-
     try {
       await Promise.allSettled([cartApi.ensure(), wishlistApi.ensure()]);
 
@@ -106,12 +114,14 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         nextWishlistItems,
         nextOrders,
         nextReviews,
+        nextAddresses,
         nextNotifications,
       ] = await Promise.all([
         cartApi.listItems(),
         wishlistApi.listItems(),
         orderApi.list(),
         reviewApi.listMine().catch(() => []),
+        addressApi.list().catch(() => []),
         notificationApi.list().catch(() => []),
       ]);
 
@@ -119,19 +129,73 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       setOrders(Array.isArray(nextOrders) ? nextOrders : []);
       setReviews(Array.isArray(nextReviews) ? nextReviews : []);
+      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
       setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
     } catch (error) {
       console.log('loadAuthedData error:', error);
-
       setCartItems([]);
       setWishlistItems([]);
       setOrders([]);
       setReviews([]);
+      setAddresses([]);
       setNotifications([]);
     } finally {
       setLoading(false);
     }
   }, [isAuthenticated]);
+
+  const addAddress = useCallback(async (payload: CustomerAddressPayload) => {
+    try {
+      await addressApi.create(payload);
+      const nextAddresses = await addressApi.list();
+      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+      Alert.alert('Success', 'Address added successfully.');
+      return true;
+    } catch (error: any) {
+      console.log('addAddress error:', error?.response?.data || error.message);
+      Alert.alert(
+        'Unable to add address',
+        getApiErrorMessage(error, 'Failed to add address.')
+      );
+      return false;
+    }
+  }, []);
+
+  const updateAddress = useCallback(
+    async (id: number, payload: Partial<CustomerAddressPayload>) => {
+      try {
+        await addressApi.update(id, payload);
+        const nextAddresses = await addressApi.list();
+        setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+        Alert.alert('Success', 'Address updated successfully.');
+        return true;
+      } catch (error: any) {
+        console.log('updateAddress error:', error?.response?.data || error.message);
+        Alert.alert(
+          'Unable to update address',
+          getApiErrorMessage(error, 'Failed to update address.')
+        );
+        return false;
+      }
+    },
+    []
+  );
+
+  const removeAddress = useCallback(async (id: number) => {
+    try {
+      await addressApi.remove(id);
+      const nextAddresses = await addressApi.list();
+      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+      return true;
+    } catch (error: any) {
+      console.log('removeAddress error:', error?.response?.data || error.message);
+      Alert.alert(
+        'Unable to remove address',
+        getApiErrorMessage(error, 'Failed to remove address.')
+      );
+      return false;
+    }
+  }, []);
 
   const addToCart = useCallback(async (variantId: number, quantity = 1) => {
     try {
@@ -167,7 +231,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
       return true;
     } catch (error: any) {
       console.log('updateCartQty error:', error?.response?.data || error.message);
@@ -187,7 +250,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
       return true;
     } catch (error: any) {
       console.log('removeCartItem error:', error?.response?.data || error.message);
@@ -214,7 +276,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextWishlistItems = await wishlistApi.listItems();
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
-
       return true;
     } catch (error: any) {
       console.log('toggleWishlist error:', error?.response?.data || error.message);
@@ -269,9 +330,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       wishlistItems,
       orders,
       reviews,
+      addresses,
       notifications,
       loadCatalog,
       loadAuthedData,
+      addAddress,
+      updateAddress,
+      removeAddress,
       addToCart,
       updateCartQty,
       removeCartItem,
@@ -286,9 +351,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       wishlistItems,
       orders,
       reviews,
+      addresses,
       notifications,
       loadCatalog,
       loadAuthedData,
+      addAddress,
+      updateAddress,
+      removeAddress,
       addToCart,
       updateCartQty,
       removeCartItem,

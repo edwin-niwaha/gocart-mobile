@@ -94,7 +94,7 @@ function AccountGrid({ items }: { items: AccountItem[] }) {
 
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, loading } = useAuth();
-  const { orders, reviews, wishlistItems, notifications, loadAuthedData } = useShop();
+  const { orders, reviews, wishlistItems, notifications, addresses, loadAuthedData } = useShop();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -125,10 +125,10 @@ export default function ProfileScreen() {
       { href: '/orders', icon: '📦', label: 'Orders', count: orders.length },
       { href: '/notifications', icon: '📬', label: 'Inbox', count: notifications.length },
       { href: '/reviews', icon: '⭐', label: 'Ratings', count: reviews.length },
-      { href: '/addresses', icon: '📍', label: 'Address', count: addressCount },
+      { href: '/addresses', icon: '📍', label: 'Address', count: addresses.length },
       { href: '/account', icon: '⚙️', label: 'Settings' },
     ],
-    [orders.length, notifications.length, reviews.length, addressCount]
+    [orders.length, notifications.length, reviews.length, addresses.length]
   );
 
   const openWhatsApp = () => {

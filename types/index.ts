@@ -137,3 +137,30 @@ export type Review = {
   created_at: string;
   updated_at: string;
 };
+
+export type CustomerAddress = {
+  id: number;
+  label: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  phone_number: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerAddressPayload = {
+  label: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state?: string;
+  postal_code: string;
+  country: string;
+  phone_number?: string;
+  is_default?: boolean;
+};
