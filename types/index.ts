@@ -57,6 +57,8 @@ export type Product = {
   is_in_stock: boolean;
   category?: Category | null;
   variants: ProductVariant[];
+  average_rating?: string | number;
+  total_reviews?: number;
   created_at: string;
   updated_at: string;
 };
@@ -119,6 +121,16 @@ export type Notification = {
   created_at?: string;
 };
 
+
+
+export type ReviewUser = {
+  id: number;
+  email?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
 export type Review = {
   id: number;
   user: {
@@ -136,6 +148,17 @@ export type Review = {
   comment: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductRating = {
+  id: number;
+  product: number;
+  product_title?: string;
+  product_slug?: string;
+  average_rating: string | number;
+  total_reviews: number;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type CustomerAddress = {

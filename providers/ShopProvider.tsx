@@ -38,6 +38,18 @@ type ShopContextType = {
   addAddress: (payload: CustomerAddressPayload) => Promise<boolean>;
   updateAddress: (id: number, payload: Partial<CustomerAddressPayload>) => Promise<boolean>;
   removeAddress: (id: number) => Promise<boolean>;
+  addReview: (payload: {
+    product: number;
+    rating: number;
+    comment: string;
+  }) => Promise<boolean>;
+  updateReview: (
+    id: number,
+    payload: Partial<{
+      rating: number;
+      comment: string;
+    }>
+  ) => Promise<boolean>;
   addToCart: (variantId: number, quantity?: number) => Promise<boolean>;
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
@@ -56,6 +68,7 @@ function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
   if (data?.quantity?.[0]) return String(data.quantity[0]);
   if (data?.variant_id?.[0]) return String(data.variant_id[0]);
   if (data?.postal_code?.[0]) return String(data.postal_code[0]);
+  if (data?.rating?.[0]) return String(data.rating[0]);
   if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
   if (typeof error?.message === 'string') return error.message;
 
@@ -197,6 +210,52 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const addReview = useCallback(
+    async (payload: { product: number; rating: number; comment: string }) => {
+      try {
+        await reviewApi.create(payload);
+        const nextReviews = await reviewApi.listMine();
+        setReviews(Array.isArray(nextReviews) ? nextReviews : []);
+        Alert.alert('Success', 'Review added successfully.');
+        return true;
+      } catch (error: any) {
+        console.log('addReview error:', error?.response?.data || error.message);
+        Alert.alert(
+          'Unable to add review',
+          getApiErrorMessage(error, 'Failed to add review.')
+        );
+        return false;
+      }
+    },
+    []
+  );
+
+  const updateReview = useCallback(
+    async (
+      id: number,
+      payload: Partial<{
+        rating: number;
+        comment: string;
+      }>
+    ) => {
+      try {
+        await reviewApi.update(id, payload);
+        const nextReviews = await reviewApi.listMine();
+        setReviews(Array.isArray(nextReviews) ? nextReviews : []);
+        Alert.alert('Success', 'Review updated successfully.');
+        return true;
+      } catch (error: any) {
+        console.log('updateReview error:', error?.response?.data || error.message);
+        Alert.alert(
+          'Unable to update review',
+          getApiErrorMessage(error, 'Failed to update review.')
+        );
+        return false;
+      }
+    },
+    []
+  );
+
   const addToCart = useCallback(async (variantId: number, quantity = 1) => {
     try {
       await cartApi.addItem({
@@ -337,6 +396,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       addAddress,
       updateAddress,
       removeAddress,
+      addReview,
+      updateReview,
       addToCart,
       updateCartQty,
       removeCartItem,
@@ -358,6 +419,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       addAddress,
       updateAddress,
       removeAddress,
+      addReview,
+      updateReview,
       addToCart,
       updateCartQty,
       removeCartItem,

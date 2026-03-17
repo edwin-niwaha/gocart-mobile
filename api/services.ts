@@ -9,6 +9,8 @@ import type {
   Order,
   OrderItem,
   Product,
+  ProductRating,
+  Review,
   User,
   Wishlist,
   WishlistItem,
@@ -52,6 +54,7 @@ export function getErrorMessage(error: any, fallback = 'Something went wrong.') 
   return fallback;
 }
 
+/// API service functions
 export const authApi = {
   async register(payload: {
     email: string;
@@ -100,6 +103,7 @@ export const authApi = {
   },
 };
 
+/// Add more API services as needed, following the same pattern
 export const catalogApi = {
   async products() {
     try {
@@ -132,6 +136,7 @@ export const catalogApi = {
   },
 };
 
+/// Cart Api with error handling and fallback logic
 export const cartApi = {
   async ensure() {
     try {
@@ -191,6 +196,7 @@ export const cartApi = {
   },
 };
 
+// Wishlist Api with error handling and fallback logic
 export const wishlistApi = {
   async ensure() {
     try {
@@ -240,6 +246,7 @@ export const wishlistApi = {
   },
 };
 
+// Order Api with error handling and fallback logic
 export const orderApi = {
   async list() {
     try {
@@ -277,6 +284,7 @@ export const orderApi = {
   },
 };
 
+// Notification Api with error handling and fallback logic
 export const notificationApi = {
   async list() {
     try {
@@ -289,17 +297,122 @@ export const notificationApi = {
   },
 };
 
+// Review Api with error handling and fallback logic
+// export const reviewApi = {
+//   listMine: async () => {
+//     const { data } = await api.get('/reviews/?mine=true');
+
+//     if (Array.isArray(data)) return data;
+//     if (Array.isArray(data?.results)) return data.results;
+
+//     return [];
+//   },
+
+//   create: async (payload: {
+//     product: number;
+//     rating: number;
+//     comment: string;
+//   }) => {
+//     const { data } = await api.post('/reviews/', payload);
+//     return data;
+//   },
+
+//   update: async (
+//     id: number,
+//     payload: Partial<{
+//       rating: number;
+//       comment: string;
+//     }>
+//   ) => {
+//     const { data } = await api.patch(`/reviews/${id}/`, payload);
+//     return data;
+//   },
+// };
+
+
 export const reviewApi = {
-  listMine: async () => {
-    const { data } = await api.get('/reviews/?mine=true');
+  async listMine(params?: { product?: number; product_slug?: string }) {
+    try {
+      const { data } = await api.get<Review[] | { results: Review[] }>('/reviews/', {
+        params,
+      });
+      return normalizeList(data);
+    } catch (error: any) {
+      console.log('GET /reviews/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
 
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.results)) return data.results;
+  async listByProduct(params: { product?: number; product_slug?: string }) {
+    try {
+      const { data } = await api.get<Review[] | { results: Review[] }>('/product-reviews/', {
+        params,
+      });
+      return normalizeList(data);
+    } catch (error: any) {
+      console.log('GET /product-reviews/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
 
-    return [];
+  async create(payload: {
+    product: number;
+    rating: number;
+    comment: string;
+  }) {
+    try {
+      const { data } = await api.post<Review>('/reviews/', payload);
+      return data;
+    } catch (error: any) {
+      console.log('POST /reviews/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async update(
+    id: number,
+    payload: Partial<{
+      rating: number;
+      comment: string;
+    }>
+  ) {
+    try {
+      const { data } = await api.patch<Review>(`/reviews/${id}/`, payload);
+      return data;
+    } catch (error: any) {
+      console.log(`PATCH /reviews/${id}/ error:`, error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async remove(id: number) {
+    try {
+      await api.delete(`/reviews/${id}/`);
+    } catch (error: any) {
+      console.log(`DELETE /reviews/${id}/ error:`, error?.response?.data || error.message);
+      throw error;
+    }
   },
 };
 
+export const ratingApi = {
+  async list(params?: { product?: number; product_slug?: string }) {
+    try {
+      const { data } = await api.get<ProductRating[] | { results: ProductRating[] }>('/ratings/', {
+        params,
+      });
+      return normalizeList(data);
+    } catch (error: any) {
+      console.log('GET /ratings/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async byProduct(params: { product?: number; product_slug?: string }) {
+    const list = await this.list(params);
+    return list[0] || null;
+  },
+};
 
 const toList = (data: any) => {
   if (Array.isArray(data)) return data;
@@ -307,6 +420,7 @@ const toList = (data: any) => {
   return [];
 };
 
+// Address Api with error handling and fallback logic
 export const addressApi = {
   list: async () => {
     const { data } = await api.get('/addresses/');
