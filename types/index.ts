@@ -93,7 +93,7 @@ export type Wishlist = {
 export type OrderItem = {
   id: number;
   product: number;
-  variant?: number;
+  variant?: number | null;
   product_title?: string;
   product_slug?: string;
   variant_name?: string;
@@ -108,8 +108,14 @@ export type Order = {
   status?: string;
   description?: string;
   total_price?: string | number;
-  items: OrderItem[];
+  items?: OrderItem[];
   created_at?: string;
+};
+
+export type CreateOrderPayload = {
+  slug: string;
+  description: string;
+  address_id: number;
 };
 
 export type Notification = {
@@ -121,8 +127,6 @@ export type Notification = {
   created_at?: string;
 };
 
-
-
 export type ReviewUser = {
   id: number;
   email?: string;
@@ -133,13 +137,7 @@ export type ReviewUser = {
 
 export type Review = {
   id: number;
-  user: {
-    id: number;
-    email?: string;
-    username?: string;
-    first_name?: string;
-    last_name?: string;
-  };
+  user: ReviewUser;
   user_id: number;
   product: number;
   product_title: string;
@@ -161,29 +159,41 @@ export type ProductRating = {
   updated_at?: string;
 };
 
+export type CustomerAddressRegion =
+  | 'kampala_area'
+  | 'entebbe_area'
+  | 'central_region'
+  | 'eastern_region'
+  | 'northern_region'
+  | 'western_region'
+  | 'rest_of_kampala';
+
 export type CustomerAddress = {
   id: number;
-  label: string;
-  address_line1: string;
-  address_line2: string;
+  street_name: string;
   city: string;
-  state: string;
-  postal_code: string;
-  country: string;
-  phone_number: string;
+  phone_number?: string | null;
+  additional_telephone?: string | null;
+  additional_information?: string | null;
+  region: CustomerAddressRegion;
   is_default: boolean;
   created_at: string;
   updated_at: string;
 };
 
-export type CustomerAddressPayload = {
-  label: string;
-  address_line1: string;
-  address_line2?: string;
+export type CreateCustomerAddressPayload = {
+  street_name: string;
   city: string;
-  state?: string;
-  postal_code: string;
-  country: string;
   phone_number?: string;
+  additional_telephone?: string;
+  additional_information?: string;
+  region?: CustomerAddressRegion;
   is_default?: boolean;
 };
+
+export type UpdateCustomerAddressPayload =
+  Partial<CreateCustomerAddressPayload>;
+
+export type CustomerAddressPayload =
+  | CreateCustomerAddressPayload
+  | UpdateCustomerAddressPayload;

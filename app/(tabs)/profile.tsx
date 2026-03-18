@@ -124,7 +124,7 @@ export default function ProfileScreen() {
     () => [
       { href: '/orders', icon: '📦', label: 'Orders', count: orders.length },
       { href: '/notifications', icon: '📬', label: 'Inbox', count: notifications.length },
-      { href: '/reviews', icon: '⭐', label: 'Ratings', count: reviews.length },
+      { href: '#', icon: '⭐', label: 'Ratings', count: reviews.length },
       { href: '/addresses', icon: '📍', label: 'Address', count: addresses.length },
       { href: '/account', icon: '⚙️', label: 'Settings' },
     ],

@@ -35,8 +35,8 @@ type ShopContextType = {
   notifications: Notification[];
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
-  addAddress: (payload: CustomerAddressPayload) => Promise<boolean>;
-  updateAddress: (id: number, payload: Partial<CustomerAddressPayload>) => Promise<boolean>;
+  addAddress: (payload: CustomerAddressPayload) => Promise<CustomerAddress | null>;
+  updateAddress: (id: number, payload: CustomerAddressPayload) => Promise<boolean>;
   removeAddress: (id: number) => Promise<boolean>;
   addReview: (payload: {
     product: number;
@@ -54,7 +54,7 @@ type ShopContextType = {
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
-  checkout: () => Promise<Order>;
+  checkout: (payload: { address_id: number }) => Promise<Order>;
 };
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
@@ -65,11 +65,21 @@ function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
   if (typeof data === 'string') return data;
   if (Array.isArray(data) && data.length) return String(data[0]);
   if (data?.detail) return String(data.detail);
+  if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
+
   if (data?.quantity?.[0]) return String(data.quantity[0]);
   if (data?.variant_id?.[0]) return String(data.variant_id[0]);
-  if (data?.postal_code?.[0]) return String(data.postal_code[0]);
   if (data?.rating?.[0]) return String(data.rating[0]);
-  if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
+
+  if (data?.street_name?.[0]) return String(data.street_name[0]);
+  if (data?.city?.[0]) return String(data.city[0]);
+  if (data?.phone_number?.[0]) return String(data.phone_number[0]);
+  if (data?.additional_telephone?.[0]) return String(data.additional_telephone[0]);
+  if (data?.additional_information?.[0]) return String(data.additional_information[0]);
+  if (data?.region?.[0]) return String(data.region[0]);
+  if (data?.is_default?.[0]) return String(data.is_default[0]);
+  if (data?.address_id?.[0]) return String(data.address_id[0]);
+
   if (typeof error?.message === 'string') return error.message;
 
   return fallback;
@@ -159,23 +169,23 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
   const addAddress = useCallback(async (payload: CustomerAddressPayload) => {
     try {
-      await addressApi.create(payload);
+      const created = await addressApi.create(payload);
       const nextAddresses = await addressApi.list();
       setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
       Alert.alert('Success', 'Address added successfully.');
-      return true;
+      return created ?? null;
     } catch (error: any) {
-      console.log('addAddress error:', error?.response?.data || error.message);
+      console.log('addAddress error:', error?.response?.data || error?.message);
       Alert.alert(
         'Unable to add address',
         getApiErrorMessage(error, 'Failed to add address.')
       );
-      return false;
+      return null;
     }
   }, []);
 
   const updateAddress = useCallback(
-    async (id: number, payload: Partial<CustomerAddressPayload>) => {
+    async (id: number, payload: CustomerAddressPayload) => {
       try {
         await addressApi.update(id, payload);
         const nextAddresses = await addressApi.list();
@@ -183,7 +193,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         Alert.alert('Success', 'Address updated successfully.');
         return true;
       } catch (error: any) {
-        console.log('updateAddress error:', error?.response?.data || error.message);
+        console.log('updateAddress error:', error?.response?.data || error?.message);
         Alert.alert(
           'Unable to update address',
           getApiErrorMessage(error, 'Failed to update address.')
@@ -201,7 +211,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
       return true;
     } catch (error: any) {
-      console.log('removeAddress error:', error?.response?.data || error.message);
+      console.log('removeAddress error:', error?.response?.data || error?.message);
       Alert.alert(
         'Unable to remove address',
         getApiErrorMessage(error, 'Failed to remove address.')
@@ -219,7 +229,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         Alert.alert('Success', 'Review added successfully.');
         return true;
       } catch (error: any) {
-        console.log('addReview error:', error?.response?.data || error.message);
+        console.log('addReview error:', error?.response?.data || error?.message);
         Alert.alert(
           'Unable to add review',
           getApiErrorMessage(error, 'Failed to add review.')
@@ -245,7 +255,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         Alert.alert('Success', 'Review updated successfully.');
         return true;
       } catch (error: any) {
-        console.log('updateReview error:', error?.response?.data || error.message);
+        console.log('updateReview error:', error?.response?.data || error?.message);
         Alert.alert(
           'Unable to update review',
           getApiErrorMessage(error, 'Failed to update review.')
@@ -269,7 +279,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       Alert.alert('Success', 'Product added to cart.');
       return true;
     } catch (error: any) {
-      console.log('addToCart error:', error?.response?.data || error.message);
+      console.log('addToCart error:', error?.response?.data || error?.message);
 
       Alert.alert(
         'Unable to add to cart',
@@ -292,7 +302,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       return true;
     } catch (error: any) {
-      console.log('updateCartQty error:', error?.response?.data || error.message);
+      console.log('updateCartQty error:', error?.response?.data || error?.message);
 
       Alert.alert(
         'Unable to update cart',
@@ -311,7 +321,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       return true;
     } catch (error: any) {
-      console.log('removeCartItem error:', error?.response?.data || error.message);
+      console.log('removeCartItem error:', error?.response?.data || error?.message);
 
       Alert.alert(
         'Unable to remove item',
@@ -337,7 +347,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       return true;
     } catch (error: any) {
-      console.log('toggleWishlist error:', error?.response?.data || error.message);
+      console.log('toggleWishlist error:', error?.response?.data || error?.message);
 
       Alert.alert(
         'Wishlist error',
@@ -348,37 +358,50 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const checkout = useCallback(async () => {
-    if (!cartItems.length) {
-      throw new Error('Your cart is empty.');
-    }
+  const checkout = useCallback(
+    async ({ address_id }: { address_id: number }) => {
+      if (!cartItems.length) {
+        throw new Error('Your cart is empty.');
+      }
 
-    const order = await orderApi.create({
-      slug: orderSlug(),
-      description: 'Placed from mobile app',
-    });
+      if (!address_id) {
+        throw new Error('Please select a delivery address.');
+      }
 
-    for (const item of cartItems) {
-      await orderApi.addItem({
-        order: order.id,
-        product: item.product.id,
-        variant: item.variant.id,
-        quantity: item.quantity,
+      const selectedAddress = addresses.find((item) => item.id === address_id);
+      if (!selectedAddress) {
+        throw new Error('Selected address was not found.');
+      }
+
+      const order = await orderApi.create({
+        slug: orderSlug(),
+        description: 'Placed from mobile app',
+        address_id,
       });
 
-      await cartApi.removeItem(item.id);
-    }
+      for (const item of cartItems) {
+        await orderApi.addItem({
+          order: order.id,
+          product: item.product.id,
+          variant: item.variant.id,
+          quantity: item.quantity,
+        });
 
-    const [nextOrders, nextCartItems] = await Promise.all([
-      orderApi.list(),
-      cartApi.listItems(),
-    ]);
+        await cartApi.removeItem(item.id);
+      }
 
-    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      const [nextOrders, nextCartItems] = await Promise.all([
+        orderApi.list(),
+        cartApi.listItems(),
+      ]);
 
-    return order;
-  }, [cartItems]);
+      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
+      return order;
+    },
+    [addresses, cartItems]
+  );
 
   const value = useMemo(
     () => ({

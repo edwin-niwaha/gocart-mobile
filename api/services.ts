@@ -5,6 +5,8 @@ import type {
   Cart,
   CartItem,
   Category,
+  CustomerAddress,
+  CustomerAddressPayload,
   Notification,
   Order,
   OrderItem,
@@ -45,6 +47,40 @@ export function getErrorMessage(error: any, fallback = 'Something went wrong.') 
 
   if (Array.isArray(data?.product_id) && data.product_id.length) {
     return String(data.product_id[0]);
+  }
+
+  if (Array.isArray(data?.street_name) && data.street_name.length) {
+    return String(data.street_name[0]);
+  }
+
+  if (Array.isArray(data?.city) && data.city.length) {
+    return String(data.city[0]);
+  }
+
+  if (Array.isArray(data?.phone_number) && data.phone_number.length) {
+    return String(data.phone_number[0]);
+  }
+
+  if (
+    Array.isArray(data?.additional_telephone) &&
+    data.additional_telephone.length
+  ) {
+    return String(data.additional_telephone[0]);
+  }
+
+  if (
+    Array.isArray(data?.additional_information) &&
+    data.additional_information.length
+  ) {
+    return String(data.additional_information[0]);
+  }
+
+  if (Array.isArray(data?.region) && data.region.length) {
+    return String(data.region[0]);
+  }
+
+  if (Array.isArray(data?.address_id) && data.address_id.length) {
+    return String(data.address_id[0]);
   }
 
   if (typeof error?.message === 'string' && error.message.trim()) {
@@ -103,7 +139,6 @@ export const authApi = {
   },
 };
 
-/// Add more API services as needed, following the same pattern
 export const catalogApi = {
   async products() {
     try {
@@ -136,7 +171,6 @@ export const catalogApi = {
   },
 };
 
-/// Cart Api with error handling and fallback logic
 export const cartApi = {
   async ensure() {
     try {
@@ -196,7 +230,6 @@ export const cartApi = {
   },
 };
 
-// Wishlist Api with error handling and fallback logic
 export const wishlistApi = {
   async ensure() {
     try {
@@ -246,7 +279,6 @@ export const wishlistApi = {
   },
 };
 
-// Order Api with error handling and fallback logic
 export const orderApi = {
   async list() {
     try {
@@ -258,7 +290,11 @@ export const orderApi = {
     }
   },
 
-  async create(payload: { slug: string; description: string }) {
+  async create(payload: {
+    slug: string;
+    description: string;
+    address_id: number;
+  }) {
     try {
       const { data } = await api.post<Order>('/orders/', payload);
       return data;
@@ -284,7 +320,6 @@ export const orderApi = {
   },
 };
 
-// Notification Api with error handling and fallback logic
 export const notificationApi = {
   async list() {
     try {
@@ -296,39 +331,6 @@ export const notificationApi = {
     }
   },
 };
-
-// Review Api with error handling and fallback logic
-// export const reviewApi = {
-//   listMine: async () => {
-//     const { data } = await api.get('/reviews/?mine=true');
-
-//     if (Array.isArray(data)) return data;
-//     if (Array.isArray(data?.results)) return data.results;
-
-//     return [];
-//   },
-
-//   create: async (payload: {
-//     product: number;
-//     rating: number;
-//     comment: string;
-//   }) => {
-//     const { data } = await api.post('/reviews/', payload);
-//     return data;
-//   },
-
-//   update: async (
-//     id: number,
-//     payload: Partial<{
-//       rating: number;
-//       comment: string;
-//     }>
-//   ) => {
-//     const { data } = await api.patch(`/reviews/${id}/`, payload);
-//     return data;
-//   },
-// };
-
 
 export const reviewApi = {
   async listMine(params?: { product?: number; product_slug?: string }) {
@@ -414,54 +416,50 @@ export const ratingApi = {
   },
 };
 
-const toList = (data: any) => {
+const toList = <T,>(data: T[] | { results?: T[] } | unknown): T[] => {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray((data as any)?.results)) return (data as any).results;
   return [];
 };
 
-// Address Api with error handling and fallback logic
 export const addressApi = {
-  list: async () => {
-    const { data } = await api.get('/addresses/');
-    return toList(data);
+  async list() {
+    try {
+      const { data } = await api.get<CustomerAddress[] | { results: CustomerAddress[] }>('/addresses/');
+      return toList<CustomerAddress>(data);
+    } catch (error: any) {
+      console.log('GET /addresses/ error:', error?.response?.data || error.message);
+      throw error;
+    }
   },
 
-  create: async (payload: {
-    label: string;
-    address_line1: string;
-    address_line2?: string;
-    city: string;
-    state?: string;
-    postal_code: string;
-    country: string;
-    phone_number?: string;
-    is_default?: boolean;
-  }) => {
-    const { data } = await api.post('/addresses/', payload);
-    return data;
+  async create(payload: CustomerAddressPayload) {
+    try {
+      const { data } = await api.post<CustomerAddress>('/addresses/', payload);
+      return data;
+    } catch (error: any) {
+      console.log('POST /addresses/ error:', error?.response?.data || error.message);
+      throw error;
+    }
   },
 
-  update: async (
-    id: number,
-    payload: Partial<{
-      label: string;
-      address_line1: string;
-      address_line2: string;
-      city: string;
-      state: string;
-      postal_code: string;
-      country: string;
-      phone_number: string;
-      is_default: boolean;
-    }>
-  ) => {
-    const { data } = await api.patch(`/addresses/${id}/`, payload);
-    return data;
+  async update(id: number, payload: CustomerAddressPayload) {
+    try {
+      const { data } = await api.patch<CustomerAddress>(`/addresses/${id}/`, payload);
+      return data;
+    } catch (error: any) {
+      console.log(`PATCH /addresses/${id}/ error:`, error?.response?.data || error.message);
+      throw error;
+    }
   },
 
-  remove: async (id: number) => {
-    const { data } = await api.delete(`/addresses/${id}/`);
-    return data;
+  async remove(id: number) {
+    try {
+      const { data } = await api.delete(`/addresses/${id}/`);
+      return data;
+    } catch (error: any) {
+      console.log(`DELETE /addresses/${id}/ error:`, error?.response?.data || error.message);
+      throw error;
+    }
   },
 };
