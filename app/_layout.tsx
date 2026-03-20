@@ -30,10 +30,11 @@ function AppShell() {
 
 export default function RootLayout() {
   return (
+    <>
     <AuthProvider>
       <AppShell />
-      <Toast />
     </AuthProvider>
-    
+    <Toast />
+    </>
   );
 }

@@ -7,9 +7,11 @@ import type {
   Category,
   CustomerAddress,
   CustomerAddressPayload,
+  ListResponse,
   Notification,
   Order,
   OrderItem,
+  PaginatedResponse,
   Product,
   ProductRating,
   Review,
@@ -88,6 +90,25 @@ export function getErrorMessage(error: any, fallback = 'Something went wrong.') 
   }
 
   return fallback;
+}
+
+function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as PaginatedResponse<T>;
+
+  return (
+    typeof candidate.count === 'number' &&
+    Array.isArray(candidate.results) &&
+    'next' in candidate &&
+    'previous' in candidate
+  );
+}
+
+function toList<T>(data: ListResponse<T> | { results?: T[] } | unknown): T[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray((data as any)?.results)) return (data as any).results;
+  return [];
 }
 
 /// API service functions
@@ -281,12 +302,25 @@ export const wishlistApi = {
 
 // Orders API
 export const orderApi = {
-  async list() {
+  async list(url?: string): Promise<ListResponse<Order>> {
     try {
-      const { data } = await api.get<Order[] | { results: Order[] }>('/orders/');
-      return normalizeList(data);
+      const endpoint = url ?? '/orders/';
+      const { data } = await api.get<ListResponse<Order>>(endpoint);
+
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      if (isPaginatedResponse<Order>(data)) {
+        return data;
+      }
+
+      return [];
     } catch (error: any) {
-      console.log('GET /orders/ error:', error?.response?.data || error.message);
+      console.log(
+        `GET ${url ?? '/orders/'} error:`,
+        error?.response?.data || error.message
+      );
       throw error;
     }
   },
@@ -334,20 +368,59 @@ export const orderApi = {
   },
 };
 
-
 // Notifications API
 export const notificationApi = {
-  async list() {
+  async list(url?: string): Promise<ListResponse<Notification>> {
     try {
-      const { data } = await api.get<Notification[] | { results: Notification[] }>('/notifications/');
-      return normalizeList(data);
+      const endpoint = url ?? '/notifications/';
+      const { data } = await api.get<ListResponse<Notification>>(endpoint);
+
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      if (isPaginatedResponse<Notification>(data)) {
+        return data;
+      }
+
+      return [];
     } catch (error: any) {
-      console.log('GET /notifications/ error:', error?.response?.data || error.message);
+      console.log(
+        `GET ${url ?? '/notifications/'} error:`,
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
+  async markRead(id: number) {
+    try {
+      const { data } = await api.post<Notification>(`/notifications/${id}/mark_read/`);
+      return data;
+    } catch (error: any) {
+      console.log(
+        `POST /notifications/${id}/mark_read/ error:`,
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
+  async markAllRead() {
+    try {
+      const { data } = await api.post('/notifications/mark_all_read/');
+      return data;
+    } catch (error: any) {
+      console.log(
+        'POST /notifications/mark_all_read/ error:',
+        error?.response?.data || error.message
+      );
       throw error;
     }
   },
 };
 
+// Reviews & Ratings API
 export const reviewApi = {
   async listMine(params?: { product?: number; product_slug?: string }) {
     try {
@@ -430,12 +503,6 @@ export const ratingApi = {
     const list = await this.list(params);
     return list[0] || null;
   },
-};
-
-const toList = <T,>(data: T[] | { results?: T[] } | unknown): T[] => {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray((data as any)?.results)) return (data as any).results;
-  return [];
 };
 
 export const addressApi = {

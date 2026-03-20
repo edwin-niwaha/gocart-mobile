@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   Modal,
@@ -7,6 +7,8 @@ import {
   Text,
   TextInput,
   View,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { AuthGate } from '@/components/AuthGate';
 import { EmptyState } from '@/components/EmptyState';
@@ -14,7 +16,7 @@ import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { money } from '@/utils/format';
-import type { Review } from '@/types';
+import type { Order, OrderItem, Review } from '@/types';
 
 type OrderStatus =
   | 'PENDING'
@@ -23,22 +25,6 @@ type OrderStatus =
   | 'SHIPPED'
   | 'DELIVERED'
   | 'CANCELLED';
-
-type OrderItem = {
-  id: number;
-  product: number;
-  quantity: number;
-  product_title?: string;
-  product_slug?: string;
-};
-
-type Order = {
-  id: number;
-  slug: string;
-  status?: string;
-  total_price: number | string;
-  items?: OrderItem[];
-};
 
 type SelectedProduct = {
   productId: number;
@@ -50,6 +36,10 @@ type ReviewFormValues = {
   rating: number;
   comment: string;
 };
+
+type OrderListRow =
+  | { type: 'header'; status: string; count: number; id: string }
+  | { type: 'order'; order: Order; id: string };
 
 function normalizeStatus(status?: string): OrderStatus | string {
   return (status || 'PENDING').toUpperCase();
@@ -210,27 +200,27 @@ function ReviewModal({
 }
 
 export default function OrdersScreen() {
-  const { orders, reviews, loadAuthedData, addReview, updateReview } = useShop() as {
-    orders: Order[];
-    reviews: Review[];
-    loadAuthedData: () => Promise<void>;
-    addReview: (payload: {
-      product: number;
-      rating: number;
-      comment: string;
-    }) => Promise<boolean>;
-    updateReview: (
-      reviewId: number,
-      payload: { rating: number; comment: string }
-    ) => Promise<boolean>;
-  };
+  const shop = useShop();
+
+  const orders = shop.orders ?? [];
+  const reviews = shop.reviews ?? [];
+  const totalOrders = shop.totalOrders ?? orders.length;
+  const loadOrders = shop.loadOrders;
+  const loadMoreOrders = shop.loadMoreOrders;
+  const refreshOrders = shop.refreshOrders;
+  const hasMoreOrders = shop.hasMoreOrders ?? false;
+  const loadingOrders = shop.loadingOrders ?? false;
+  const loadingMoreOrders = shop.loadingMoreOrders ?? false;
+  const refreshingOrders = shop.refreshingOrders ?? false;
+  const addReview = shop.addReview;
+  const updateReview = shop.updateReview;
 
   const [saving, setSaving] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SelectedProduct | null>(null);
 
   useEffect(() => {
-    loadAuthedData().catch(() => undefined);
-  }, [loadAuthedData]);
+    loadOrders().catch(() => undefined);
+  }, [loadOrders]);
 
   const groupedOrders = useMemo(() => {
     const groups: Record<string, Order[]> = {};
@@ -244,156 +234,235 @@ export default function OrdersScreen() {
     return groups;
   }, [orders]);
 
+  const flattenedRows = useMemo<OrderListRow[]>(() => {
+    const rows: OrderListRow[] = [];
+
+    Object.entries(groupedOrders).forEach(([status, grouped]) => {
+      rows.push({
+        type: 'header',
+        status,
+        count: grouped.length,
+        id: `header-${status}`,
+      });
+
+      grouped.forEach((order) => {
+        rows.push({
+          type: 'order',
+          order,
+          id: `order-${order.id}`,
+        });
+      });
+    });
+
+    return rows;
+  }, [groupedOrders]);
+
   const reviewMap = useMemo(() => {
     return new Map<number, Review>(reviews.map((review) => [review.product, review]));
   }, [reviews]);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     if (saving) return;
     setSelectedProduct(null);
-  };
+  }, [saving]);
 
-  const handleReviewSubmit = async (values: ReviewFormValues) => {
-    if (!selectedProduct) return;
+  const handleReviewSubmit = useCallback(
+    async (values: ReviewFormValues) => {
+      if (!selectedProduct) return;
 
-    setSaving(true);
+      setSaving(true);
 
-    try {
-      const ok = selectedProduct.review
-        ? await updateReview(selectedProduct.review.id, values)
-        : await addReview({
-            product: selectedProduct.productId,
-            rating: values.rating,
-            comment: values.comment,
-          });
+      try {
+        const ok = selectedProduct.review
+          ? await updateReview(selectedProduct.review.id, values)
+          : await addReview({
+              product: selectedProduct.productId,
+              rating: values.rating,
+              comment: values.comment,
+            });
 
-      if (ok) {
-        closeModal();
-      } else {
+        if (ok) {
+          closeModal();
+        } else {
+          Alert.alert(
+            'Review not saved',
+            'Something went wrong while saving your review.'
+          );
+        }
+      } catch {
         Alert.alert(
           'Review not saved',
           'Something went wrong while saving your review.'
         );
+      } finally {
+        setSaving(false);
       }
-    } catch {
-      Alert.alert(
-        'Review not saved',
-        'Something went wrong while saving your review.'
+    },
+    [addReview, closeModal, selectedProduct, updateReview]
+  );
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMoreOrders) return;
+    if (loadingMoreOrders) return;
+    if (loadingOrders) return;
+
+    loadMoreOrders().catch(() => undefined);
+  }, [hasMoreOrders, loadingMoreOrders, loadingOrders, loadMoreOrders]);
+
+  const handleRefresh = useCallback(() => {
+    refreshOrders().catch(() => undefined);
+  }, [refreshOrders]);
+
+  const renderHeader = useCallback(() => {
+    if (!orders.length) return null;
+
+    return (
+      <View style={styles.pageTopRow}>
+        <Text style={styles.pageTitle}>My Orders</Text>
+        <Text style={styles.pageCountPill}>
+          {totalOrders} order{totalOrders === 1 ? '' : 's'}
+        </Text>
+      </View>
+    );
+  }, [orders.length, totalOrders]);
+
+  const renderFooter = useCallback(() => {
+    if (loadingMoreOrders) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
       );
-    } finally {
-      setSaving(false);
     }
-  };
+
+    return <View style={styles.footerSpacer} />;
+  }, [loadingMoreOrders]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: OrderListRow }) => {
+      if (item.type === 'header') {
+        return (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{formatStatus(item.status)}</Text>
+            <Text style={styles.countPill}>{item.count}</Text>
+          </View>
+        );
+      }
+
+      const order = item.order;
+      const uniqueItems = getUniqueOrderItems(order.items || []);
+      const itemCount =
+        order.items?.reduce((sum, orderItem) => sum + orderItem.quantity, 0) ?? 0;
+      const reviewAllowed = canReviewOrder(order.status);
+      const orderStatusColor = getStatusColor(order.status);
+
+      return (
+        <View style={styles.card}>
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={styles.slug}>Order #{order.slug}</Text>
+              <Text style={styles.meta}>
+                {itemCount} {itemCount === 1 ? 'item' : 'items'}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: `${orderStatusColor}15` },
+              ]}
+            >
+              <Text style={[styles.statusText, { color: orderStatusColor }]}>
+                {formatStatus(order.status)}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.amount}>{money(order.total_price ?? 0)}</Text>
+
+          {!uniqueItems.length ? (
+            <Text style={styles.emptyItemsText}>
+              No items found for this order.
+            </Text>
+          ) : (
+            <View style={styles.itemsWrap}>
+              {uniqueItems.map((orderItem) => {
+                const existingReview = reviewMap.get(orderItem.product);
+                const productTitle = getProductTitle(orderItem);
+
+                return (
+                  <View key={orderItem.id} style={styles.itemBlock}>
+                    <View style={styles.itemRow}>
+                      <View style={styles.dot} />
+                      <Text style={styles.itemText}>
+                        {productTitle} × {orderItem.quantity}
+                      </Text>
+                    </View>
+
+                    {reviewAllowed && (
+                      <Pressable
+                        onPress={() =>
+                          setSelectedProduct({
+                            productId: orderItem.product,
+                            productTitle,
+                            review: existingReview || null,
+                          })
+                        }
+                        style={[
+                          styles.reviewBtn,
+                          existingReview && styles.reviewBtnMuted,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.reviewBtnText,
+                            existingReview && styles.reviewBtnTextMuted,
+                          ]}
+                        >
+                          {existingReview ? 'Edit Review' : 'Write Review'}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    },
+    [reviewMap]
+  );
 
   return (
-    <Screen scroll>
+    <Screen>
       <AuthGate message="Log in to view your order history.">
-        <View style={styles.container}>
-          {!orders.length ? (
+        {loadingOrders && !orders.length ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : !orders.length ? (
+          <View style={styles.emptyWrap}>
             <EmptyState
               title="No orders yet"
               subtitle="Place an order from checkout and it will appear here."
             />
-          ) : (
-            Object.entries(groupedOrders).map(([status, grouped]) => {
-              const statusColor = getStatusColor(status);
-
-              return (
-                <View key={status} style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>{formatStatus(status)}</Text>
-                    <Text style={styles.countPill}>{grouped.length}</Text>
-                  </View>
-
-                  {grouped.map((order) => {
-                    const uniqueItems = getUniqueOrderItems(order.items || []);
-                    const itemCount =
-                      order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-                    const reviewAllowed = canReviewOrder(order.status);
-                    const orderStatusColor = getStatusColor(order.status);
-
-                    return (
-                      <View key={order.id} style={styles.card}>
-                        <View style={styles.header}>
-                          <View style={styles.headerText}>
-                            <Text style={styles.slug}>Order #{order.slug}</Text>
-                            <Text style={styles.meta}>
-                              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                            </Text>
-                          </View>
-
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: `${orderStatusColor}15` },
-                            ]}
-                          >
-                            <Text
-                              style={[styles.statusText, { color: orderStatusColor }]}
-                            >
-                              {formatStatus(order.status)}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <Text style={styles.amount}>{money(order.total_price)}</Text>
-
-                        {!uniqueItems.length ? (
-                          <Text style={styles.emptyItemsText}>
-                            No items found for this order.
-                          </Text>
-                        ) : (
-                          <View style={styles.itemsWrap}>
-                            {uniqueItems.map((item) => {
-                              const existingReview = reviewMap.get(item.product);
-                              const productTitle = getProductTitle(item);
-
-                              return (
-                                <View key={item.id} style={styles.itemBlock}>
-                                  <View style={styles.itemRow}>
-                                    <View style={styles.dot} />
-                                    <Text style={styles.itemText}>
-                                      {productTitle} × {item.quantity}
-                                    </Text>
-                                  </View>
-
-                                  {reviewAllowed && (
-                                    <Pressable
-                                      onPress={() =>
-                                        setSelectedProduct({
-                                          productId: item.product,
-                                          productTitle,
-                                          review: existingReview || null,
-                                        })
-                                      }
-                                      style={[
-                                        styles.reviewBtn,
-                                        existingReview && styles.reviewBtnMuted,
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.reviewBtnText,
-                                          existingReview && styles.reviewBtnTextMuted,
-                                        ]}
-                                      >
-                                        {existingReview ? 'Edit Review' : 'Write Review'}
-                                      </Text>
-                                    </Pressable>
-                                  )}
-                                </View>
-                              );
-                            })}
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              );
-            })
-          )}
-        </View>
+          </View>
+        ) : (
+          <FlatList
+            data={flattenedRows}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListHeaderComponent={renderHeader}
+            ListFooterComponent={renderFooter}
+            contentContainerStyle={styles.container}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.4}
+            onRefresh={handleRefresh}
+            refreshing={refreshingOrders}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
         <ReviewModal
           visible={!!selectedProduct}
@@ -410,18 +479,42 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
   },
 
-  section: {
-    gap: spacing.md,
+  pageTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.text,
+  },
+
+  pageCountPill: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
   },
 
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.md,
+    marginTop: spacing.xs,
   },
 
   sectionTitle: {
@@ -442,6 +535,15 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
 
+  emptyWrap: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 24,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xl,
+  },
+
   card: {
     backgroundColor: '#fff',
     borderRadius: 22,
@@ -454,6 +556,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+    marginBottom: spacing.md,
   },
 
   header: {
@@ -555,6 +658,21 @@ const styles = StyleSheet.create({
 
   reviewBtnTextMuted: {
     color: colors.text,
+  },
+
+  footerLoader: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+
+  footerSpacer: {
+    height: spacing.md,
+  },
+
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   modalBackdrop: {

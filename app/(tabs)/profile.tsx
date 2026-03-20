@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Link } from 'expo-router';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View, Image } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { AuthGate } from '@/components/AuthGate';
 import { useAuth } from '@/providers/AuthProvider';
@@ -37,7 +37,12 @@ function MenuRow({ label, icon, href, onPress, danger, noBorder }: MenuRowProps)
       <View style={[styles.menuIconWrap, danger && styles.menuIconDanger]}>
         <Text style={styles.menuIcon}>{icon}</Text>
       </View>
-      <Text style={[styles.menuLabel, danger && styles.dangerText]} numberOfLines={1}>
+
+      <Text
+        style={[styles.menuLabel, danger && styles.dangerText]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
         {label}
       </Text>
     </Pressable>
@@ -102,6 +107,15 @@ export default function ProfileScreen() {
     }
   }, [isAuthenticated, loadAuthedData]);
 
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+
+  const unreadNotifications = useMemo(
+    () => safeNotifications.filter((item) => !item.is_read),
+    [safeNotifications]
+  );
+
+  const unreadCount = unreadNotifications.length;
+
   const initials =
     user?.first_name?.[0]?.toUpperCase() ||
     user?.username?.[0]?.toUpperCase() ||
@@ -116,19 +130,15 @@ export default function ProfileScreen() {
     [orders, reviews, wishlistItems]
   );
 
-  const addressCount = Array.isArray((user as any)?.addresses)
-    ? (user as any).addresses.length
-    : 0;
-
   const accountItems = useMemo<AccountItem[]>(
     () => [
       { href: '/orders', icon: '📦', label: 'Orders', count: orders.length },
-      { href: '/notifications', icon: '📬', label: 'Inbox', count: notifications.length },
+      { href: '/notifications', icon: '📬', label: 'Inbox', count: unreadCount },
       { href: '#', icon: '⭐', label: 'Ratings', count: reviews.length },
       { href: '/addresses', icon: '📍', label: 'Address', count: addresses.length },
       { href: '/account', icon: '⚙️', label: 'Settings' },
     ],
-    [orders.length, notifications.length, reviews.length, addresses.length]
+    [orders.length, unreadCount, reviews.length, addresses.length]
   );
 
   const openWhatsApp = () => {
@@ -147,11 +157,19 @@ export default function ProfileScreen() {
         <View style={styles.heroBg} />
 
         <View style={styles.heroInner}>
-          <View style={styles.avatarRing}>
-            <View style={styles.avatar}>
+        <View style={styles.avatarRing}>
+          <View style={styles.avatar}>
+            {user?.profile_picture_url ? (
+              <Image
+                source={{ uri: user.profile_picture_url }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
+            ) : (
               <Text style={styles.avatarText}>{initials}</Text>
-            </View>
+            )}
           </View>
+        </View>
 
           <View style={styles.heroInfo}>
             <Text style={styles.heroName}>
@@ -159,12 +177,24 @@ export default function ProfileScreen() {
                 ? fullName(user?.first_name, user?.last_name, user?.username)
                 : 'Guest'}
             </Text>
+
             <Text style={styles.heroEmail}>{user?.email || 'Not signed in'}</Text>
-            <View style={styles.heroBadge}>
-              <View style={[styles.dot, !isAuthenticated && styles.dotMuted]} />
-              <Text style={[styles.heroBadgeText, !isAuthenticated && styles.mutedText]}>
-                {isAuthenticated ? 'Standard Member' : 'Guest'}
-              </Text>
+
+            <View style={styles.heroMetaRow}>
+              <View style={styles.heroBadge}>
+                <View style={[styles.dot, !isAuthenticated && styles.dotMuted]} />
+                <Text style={[styles.heroBadgeText, !isAuthenticated && styles.mutedText]}>
+                  {isAuthenticated ? 'Standard Member' : 'Guest'}
+                </Text>
+              </View>
+
+              {isAuthenticated && unreadCount > 0 ? (
+                <View style={styles.unreadPill}>
+                  <Text style={styles.unreadPillText}>
+                    {unreadCount} unread
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -187,6 +217,36 @@ export default function ProfileScreen() {
             <AccountGrid items={accountItems} />
           </AuthGate>
         </View>
+
+        {isAuthenticated && unreadCount > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Inbox" />
+            <Link href="/notifications" asChild>
+              <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+                <View style={styles.inboxPreviewRow}>
+                  <View style={styles.inboxPreviewLeft}>
+                    <View style={styles.inboxPreviewIconWrap}>
+                      <Text style={styles.inboxPreviewIcon}>📬</Text>
+                    </View>
+
+                    <View style={styles.inboxPreviewTextWrap}>
+                      <Text style={styles.inboxPreviewTitle}>Unread notifications</Text>
+                      <Text style={styles.inboxPreviewSubtitle} numberOfLines={2}>
+                        You have {unreadCount} unread notification{unreadCount === 1 ? '' : 's'}.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.inboxPreviewBadge}>
+                    <Text style={styles.inboxPreviewBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+            </Link>
+          </View>
+        )}
 
         <View style={styles.section}>
           <SectionHeader title="Support" />
@@ -214,11 +274,6 @@ export default function ProfileScreen() {
             <SectionHeader title="Session" />
             <View style={styles.card}>
               <MenuRow
-                href="/notifications"
-                icon="🔔"
-                label={`Notifications${notifications.length ? ` (${notifications.length})` : ''}`}
-              />
-              <MenuRow
                 icon="🚪"
                 label={loading ? 'Signing out…' : 'Logout'}
                 onPress={logout}
@@ -240,14 +295,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingBottom: spacing.lg,
   },
+
   body: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     gap: spacing.md,
   },
+
   section: {
     gap: spacing.xs,
   },
+
   pressed: {
     opacity: 0.7,
   },
@@ -266,6 +324,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     overflow: 'hidden',
   },
+
   heroBg: {
     position: 'absolute',
     top: -60,
@@ -275,6 +334,7 @@ const styles = StyleSheet.create({
     borderRadius: 110,
     backgroundColor: colors.primarySoft,
   },
+
   heroInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -283,12 +343,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
+
   avatarRing: {
     padding: 3,
     borderRadius: 999,
     borderWidth: 2,
     borderColor: colors.primary,
   },
+
   avatar: {
     width: 58,
     height: 58,
@@ -297,30 +359,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   avatarText: {
     fontSize: 22,
     fontWeight: '800',
     color: colors.primary,
   },
+
   heroInfo: {
     flex: 1,
   },
+
   heroName: {
     fontSize: 18,
     fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.3,
   },
+
   heroEmail: {
     fontSize: 12,
     color: colors.muted,
     marginTop: 2,
   },
+
+  heroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 6,
+  },
+
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 6,
     alignSelf: 'flex-start',
     backgroundColor: colors.primarySoft,
     paddingHorizontal: 9,
@@ -329,21 +403,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
   },
+
+  unreadPill: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  unreadPillText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.success,
   },
+
   dotMuted: {
     backgroundColor: colors.muted,
   },
+
   heroBadgeText: {
     fontSize: 10.5,
     fontWeight: '700',
     color: colors.primary,
     letterSpacing: 0.3,
   },
+
   mutedText: {
     color: colors.muted,
   },
@@ -353,16 +447,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+
   statPill: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 10,
   },
+
   statValue: {
     fontSize: 17,
     fontWeight: '800',
     color: colors.text,
   },
+
   statLabel: {
     fontSize: 10.5,
     color: colors.muted,
@@ -370,6 +467,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+
   statDivider: {
     width: 1,
     backgroundColor: colors.border,
@@ -381,6 +479,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
+
   sectionTitle: {
     fontSize: 11,
     fontWeight: '800',
@@ -388,6 +487,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.1,
   },
+
   sectionLine: {
     flex: 1,
     height: 1,
@@ -402,10 +502,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.surface,
   },
+
   menuRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+
   menuIconWrap: {
     width: 32,
     height: 32,
@@ -414,18 +516,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   menuIconDanger: {
     backgroundColor: `${colors.danger}14`,
   },
+
   menuIcon: {
     fontSize: 15,
   },
+
   menuLabel: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
+
   dangerText: {
     color: colors.danger,
   },
@@ -440,14 +546,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+
   iconItem: {
     flex: 1,
     alignItems: 'center',
     gap: 6,
   },
+
   iconCircleWrap: {
     position: 'relative',
   },
+
   iconCircle: {
     width: 50,
     height: 50,
@@ -456,9 +565,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   iconEmoji: {
     fontSize: 20,
   },
+
   iconBadge: {
     position: 'absolute',
     top: -4,
@@ -473,11 +584,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface,
   },
+
   iconBadgeText: {
     color: colors.surface,
     fontSize: 10,
     fontWeight: '800',
   },
+
   iconLabel: {
     fontSize: 10,
     textAlign: 'center',
@@ -485,10 +598,72 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  inboxPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+
+  inboxPreviewLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+
+  inboxPreviewIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  inboxPreviewIcon: {
+    fontSize: 18,
+  },
+
+  inboxPreviewTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+
+  inboxPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  inboxPreviewSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 18,
+  },
+
+  inboxPreviewBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  inboxPreviewBadgeText: {
+    color: colors.surface,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
   supportGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
+
   supportBtn: {
     flex: 1,
     height: 64,
@@ -498,17 +673,21 @@ const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
   },
+
   whatsappBtn: {
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
   },
+
   emailBtn: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
+
   supportBtnIcon: {
     fontSize: 18,
   },
+
   supportBtnLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -521,4 +700,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 4,
   },
+
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
+
 });

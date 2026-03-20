@@ -9,7 +9,7 @@ export type User = {
   username: string;
   first_name?: string;
   last_name?: string;
-  profile_picture_url?: string;
+  profile_picture_url?: string | null;
   user_type?: string;
   is_active?: boolean;
   created_at?: string;
@@ -19,6 +19,18 @@ export type AuthResponse = {
   user: User;
   tokens: Tokens;
 };
+
+/**
+ * Generic API pagination types
+ */
+export type PaginatedResponse<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+export type ListResponse<T> = T[] | PaginatedResponse<T>;
 
 export type Category = {
   id: number;
@@ -102,15 +114,28 @@ export type OrderItem = {
   line_total?: string | number;
 };
 
+export type OrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'processing'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled'
+  | 'completed';
+
 export type Order = {
   id: number;
   slug: string;
-  status?: string;
+  status?: OrderStatus | string;
   description?: string;
   total_price?: string | number;
   items?: OrderItem[];
   created_at?: string;
+  updated_at?: string;
 };
+
+export type OrderListResponse = ListResponse<Order>;
+export type PaginatedOrderResponse = PaginatedResponse<Order>;
 
 export type CreateOrderPayload = {
   slug: string;
@@ -118,14 +143,26 @@ export type CreateOrderPayload = {
   address_id: number;
 };
 
+export type NotificationType =
+  | 'order'
+  | 'promotion'
+  | 'system'
+  | 'delivery'
+  | 'general'
+  | string;
+
 export type Notification = {
   id: number;
   title: string;
   message: string;
-  notification_type?: string;
-  is_read?: boolean;
+  notification_type?: NotificationType;
+  is_read: boolean;
   created_at?: string;
+  read_at?: string | null;
 };
+
+export type NotificationListResponse = ListResponse<Notification>;
+export type PaginatedNotificationResponse = PaginatedResponse<Notification>;
 
 export type ReviewUser = {
   id: number;

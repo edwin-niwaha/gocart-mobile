@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
 import {
   addressApi,
   catalogApi,
@@ -20,8 +19,15 @@ import type {
   Review,
   WishlistItem,
 } from '@/types';
-import { orderSlug } from '@/utils/format';
 import { useAuth } from '@/providers/AuthProvider';
+import { showError, showInfo, showSuccess } from '@/utils/toast';
+
+type PaginatedResponse<T> = {
+  count: number;
+  next: string | null;
+  previous?: string | null;
+  results: T[];
+};
 
 type ShopContextType = {
   loading: boolean;
@@ -30,11 +36,27 @@ type ShopContextType = {
   cartItems: CartItem[];
   wishlistItems: WishlistItem[];
   orders: Order[];
+  totalOrders: number;
+  hasMoreOrders: boolean;
+  loadingOrders: boolean;
+  loadingMoreOrders: boolean;
+  refreshingOrders: boolean;
   reviews: Review[];
   addresses: CustomerAddress[];
   notifications: Notification[];
+  totalNotifications: number;
+  hasMoreNotifications: boolean;
+  loadingNotifications: boolean;
+  loadingMoreNotifications: boolean;
+  refreshingNotifications: boolean;
   loadCatalog: () => Promise<void>;
   loadAuthedData: () => Promise<void>;
+  loadOrders: () => Promise<void>;
+  loadMoreOrders: () => Promise<void>;
+  refreshOrders: () => Promise<void>;
+  loadNotifications: () => Promise<void>;
+  loadMoreNotifications: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   addAddress: (payload: CustomerAddressPayload) => Promise<CustomerAddress | null>;
   updateAddress: (id: number, payload: CustomerAddressPayload) => Promise<boolean>;
   removeAddress: (id: number) => Promise<boolean>;
@@ -55,6 +77,10 @@ type ShopContextType = {
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
   checkout: (payload: { address_id: number }) => Promise<Order>;
+  markNotificationRead: (id: number) => Promise<boolean>;
+  markAllNotificationsRead: () => Promise<boolean>;
+  markingNotificationIds: number[];
+  markingAllNotifications: boolean;
 };
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
@@ -85,6 +111,17 @@ function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
   return fallback;
 }
 
+function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as PaginatedResponse<T>;
+  return (
+    Array.isArray(candidate.results) &&
+    typeof candidate.count === 'number' &&
+    'next' in candidate
+  );
+}
+
 export function ShopProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
 
@@ -94,9 +131,95 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [nextOrdersUrl, setNextOrdersUrl] = useState<string | null>(null);
+  const [hasMoreOrders, setHasMoreOrders] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
+  const [refreshingOrders, setRefreshingOrders] = useState(false);
+
   const [reviews, setReviews] = useState<Review[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [totalNotifications, setTotalNotifications] = useState(0);
+  const [nextNotificationsUrl, setNextNotificationsUrl] = useState<string | null>(null);
+  const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [loadingMoreNotifications, setLoadingMoreNotifications] = useState(false);
+  const [refreshingNotifications, setRefreshingNotifications] = useState(false);
+  const [markingNotificationIds, setMarkingNotificationIds] = useState<number[]>([]);
+  const [markingAllNotifications, setMarkingAllNotifications] = useState(false);
+
+  const resetAuthedState = useCallback(() => {
+    setCartItems([]);
+    setWishlistItems([]);
+    setOrders([]);
+    setTotalOrders(0);
+    setNextOrdersUrl(null);
+    setHasMoreOrders(false);
+    setLoadingOrders(false);
+    setLoadingMoreOrders(false);
+    setRefreshingOrders(false);
+    setReviews([]);
+    setAddresses([]);
+    setNotifications([]);
+    setTotalNotifications(0);
+    setNextNotificationsUrl(null);
+    setHasMoreNotifications(false);
+    setLoadingNotifications(false);
+    setLoadingMoreNotifications(false);
+    setRefreshingNotifications(false);
+    setMarkingNotificationIds([]);
+    setMarkingAllNotifications(false);
+  }, []);
+
+  const applyOrdersPage = useCallback(
+    (
+      payload: PaginatedResponse<Order>,
+      mode: 'replace' | 'append' = 'replace'
+    ) => {
+      const safeResults = Array.isArray(payload.results) ? payload.results : [];
+
+      setOrders((current) => {
+        if (mode === 'replace') {
+          return safeResults;
+        }
+
+        const existingIds = new Set(current.map((item) => item.id));
+        const dedupedIncoming = safeResults.filter((item) => !existingIds.has(item.id));
+        return [...current, ...dedupedIncoming];
+      });
+
+      setTotalOrders(typeof payload.count === 'number' ? payload.count : safeResults.length);
+      setNextOrdersUrl(payload.next ?? null);
+      setHasMoreOrders(Boolean(payload.next));
+    },
+    []
+  );
+
+  const applyNotificationsPage = useCallback(
+    (
+      payload: PaginatedResponse<Notification>,
+      mode: 'replace' | 'append' = 'replace'
+    ) => {
+      const safeResults = Array.isArray(payload.results) ? payload.results : [];
+
+      setNotifications((current) => {
+        if (mode === 'replace') {
+          return safeResults;
+        }
+
+        const existingIds = new Set(current.map((item) => item.id));
+        const dedupedIncoming = safeResults.filter((item) => !existingIds.has(item.id));
+        return [...current, ...dedupedIncoming];
+      });
+
+      setTotalNotifications(typeof payload.count === 'number' ? payload.count : safeResults.length);
+      setNextNotificationsUrl(payload.next ?? null);
+      setHasMoreNotifications(Boolean(payload.next));
+    },
+    []
+  );
 
   const loadCatalog = useCallback(async () => {
     setLoading(true);
@@ -112,19 +235,200 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       console.log('loadCatalog error:', error);
       setProducts([]);
       setCategories([]);
+      showError('Failed to load catalog.');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const loadOrders = useCallback(async () => {
+    if (!isAuthenticated) {
+      setOrders([]);
+      setTotalOrders(0);
+      setNextOrdersUrl(null);
+      setHasMoreOrders(false);
+      return;
+    }
+
+    setLoadingOrders(true);
+
+    try {
+      const response = await orderApi.list();
+
+      if (isPaginatedResponse<Order>(response)) {
+        applyOrdersPage(response, 'replace');
+      } else if (Array.isArray(response)) {
+        setOrders(response);
+        setTotalOrders(response.length);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      } else {
+        setOrders([]);
+        setTotalOrders(0);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      }
+    } catch (error) {
+      console.log('loadOrders error:', error);
+      setOrders([]);
+      setTotalOrders(0);
+      setNextOrdersUrl(null);
+      setHasMoreOrders(false);
+      showError('Failed to load orders.');
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [applyOrdersPage, isAuthenticated]);
+
+  const refreshOrders = useCallback(async () => {
+    if (!isAuthenticated) {
+      setOrders([]);
+      setTotalOrders(0);
+      setNextOrdersUrl(null);
+      setHasMoreOrders(false);
+      return;
+    }
+
+    setRefreshingOrders(true);
+
+    try {
+      const response = await orderApi.list();
+
+      if (isPaginatedResponse<Order>(response)) {
+        applyOrdersPage(response, 'replace');
+      } else if (Array.isArray(response)) {
+        setOrders(response);
+        setTotalOrders(response.length);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      }
+    } catch (error) {
+      console.log('refreshOrders error:', error);
+      showError('Failed to refresh orders.');
+    } finally {
+      setRefreshingOrders(false);
+    }
+  }, [applyOrdersPage, isAuthenticated]);
+
+  const loadMoreOrders = useCallback(async () => {
+    if (!isAuthenticated) return;
+    if (!nextOrdersUrl) return;
+    if (loadingMoreOrders) return;
+
+    setLoadingMoreOrders(true);
+
+    try {
+      const response = await orderApi.list(nextOrdersUrl);
+
+      if (isPaginatedResponse<Order>(response)) {
+        applyOrdersPage(response, 'append');
+      }
+    } catch (error) {
+      console.log('loadMoreOrders error:', error);
+      showError('Failed to load more orders.');
+    } finally {
+      setLoadingMoreOrders(false);
+    }
+  }, [applyOrdersPage, isAuthenticated, loadingMoreOrders, nextOrdersUrl]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setNotifications([]);
+      setTotalNotifications(0);
+      setNextNotificationsUrl(null);
+      setHasMoreNotifications(false);
+      return;
+    }
+
+    setLoadingNotifications(true);
+
+    try {
+      const response = await notificationApi.list();
+
+      if (isPaginatedResponse<Notification>(response)) {
+        applyNotificationsPage(response, 'replace');
+      } else if (Array.isArray(response)) {
+        setNotifications(response);
+        setTotalNotifications(response.length);
+        setNextNotificationsUrl(null);
+        setHasMoreNotifications(false);
+      } else {
+        setNotifications([]);
+        setTotalNotifications(0);
+        setNextNotificationsUrl(null);
+        setHasMoreNotifications(false);
+      }
+    } catch (error) {
+      console.log('loadNotifications error:', error);
+      setNotifications([]);
+      setTotalNotifications(0);
+      setNextNotificationsUrl(null);
+      setHasMoreNotifications(false);
+      showError('Failed to load notifications.');
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [applyNotificationsPage, isAuthenticated]);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setNotifications([]);
+      setTotalNotifications(0);
+      setNextNotificationsUrl(null);
+      setHasMoreNotifications(false);
+      return;
+    }
+
+    setRefreshingNotifications(true);
+
+    try {
+      const response = await notificationApi.list();
+
+      if (isPaginatedResponse<Notification>(response)) {
+        applyNotificationsPage(response, 'replace');
+      } else if (Array.isArray(response)) {
+        setNotifications(response);
+        setTotalNotifications(response.length);
+        setNextNotificationsUrl(null);
+        setHasMoreNotifications(false);
+      }
+    } catch (error) {
+      console.log('refreshNotifications error:', error);
+      showError('Failed to refresh notifications.');
+    } finally {
+      setRefreshingNotifications(false);
+    }
+  }, [applyNotificationsPage, isAuthenticated]);
+
+  const loadMoreNotifications = useCallback(async () => {
+    if (!isAuthenticated) return;
+    if (!nextNotificationsUrl) return;
+    if (loadingMoreNotifications) return;
+
+    setLoadingMoreNotifications(true);
+
+    try {
+      const response = await notificationApi.list(nextNotificationsUrl);
+
+      if (isPaginatedResponse<Notification>(response)) {
+        applyNotificationsPage(response, 'append');
+      }
+    } catch (error) {
+      console.log('loadMoreNotifications error:', error);
+      showError('Failed to load more notifications.');
+    } finally {
+      setLoadingMoreNotifications(false);
+    }
+  }, [
+    applyNotificationsPage,
+    isAuthenticated,
+    loadingMoreNotifications,
+    nextNotificationsUrl,
+  ]);
+
   const loadAuthedData = useCallback(async () => {
     if (!isAuthenticated) {
-      setCartItems([]);
-      setWishlistItems([]);
-      setOrders([]);
-      setReviews([]);
-      setAddresses([]);
-      setNotifications([]);
+      resetAuthedState();
       return;
     }
 
@@ -150,36 +454,66 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
-      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
       setReviews(Array.isArray(nextReviews) ? nextReviews : []);
       setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
-      setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
+
+      if (isPaginatedResponse<Order>(nextOrders)) {
+        applyOrdersPage(nextOrders, 'replace');
+      } else if (Array.isArray(nextOrders)) {
+        setOrders(nextOrders);
+        setTotalOrders(nextOrders.length);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      } else {
+        setOrders([]);
+        setTotalOrders(0);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      }
+
+      if (isPaginatedResponse<Notification>(nextNotifications)) {
+        applyNotificationsPage(nextNotifications, 'replace');
+      } else if (Array.isArray(nextNotifications)) {
+        setNotifications(nextNotifications);
+        setTotalNotifications(nextNotifications.length);
+        setNextNotificationsUrl(null);
+        setHasMoreNotifications(false);
+      } else {
+        setNotifications([]);
+        setTotalNotifications(0);
+        setNextNotificationsUrl(null);
+        setHasMoreNotifications(false);
+      }
     } catch (error) {
       console.log('loadAuthedData error:', error);
       setCartItems([]);
       setWishlistItems([]);
       setOrders([]);
+      setTotalOrders(0);
+      setNextOrdersUrl(null);
+      setHasMoreOrders(false);
       setReviews([]);
       setAddresses([]);
       setNotifications([]);
+      setTotalNotifications(0);
+      setNextNotificationsUrl(null);
+      setHasMoreNotifications(false);
+      showError('Failed to load your account data.');
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [applyNotificationsPage, applyOrdersPage, isAuthenticated, resetAuthedState]);
 
   const addAddress = useCallback(async (payload: CustomerAddressPayload) => {
     try {
       const created = await addressApi.create(payload);
       const nextAddresses = await addressApi.list();
       setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
-      Alert.alert('Success', 'Address added successfully.');
+      showSuccess('Address added successfully.');
       return created ?? null;
     } catch (error: any) {
       console.log('addAddress error:', error?.response?.data || error?.message);
-      Alert.alert(
-        'Unable to add address',
-        getApiErrorMessage(error, 'Failed to add address.')
-      );
+      showError(getApiErrorMessage(error, 'Failed to add address.'));
       return null;
     }
   }, []);
@@ -190,14 +524,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         await addressApi.update(id, payload);
         const nextAddresses = await addressApi.list();
         setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
-        Alert.alert('Success', 'Address updated successfully.');
+        showSuccess('Address updated successfully.');
         return true;
       } catch (error: any) {
         console.log('updateAddress error:', error?.response?.data || error?.message);
-        Alert.alert(
-          'Unable to update address',
-          getApiErrorMessage(error, 'Failed to update address.')
-        );
+        showError(getApiErrorMessage(error, 'Failed to update address.'));
         return false;
       }
     },
@@ -209,13 +540,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       await addressApi.remove(id);
       const nextAddresses = await addressApi.list();
       setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+      showSuccess('Address removed successfully.');
       return true;
     } catch (error: any) {
       console.log('removeAddress error:', error?.response?.data || error?.message);
-      Alert.alert(
-        'Unable to remove address',
-        getApiErrorMessage(error, 'Failed to remove address.')
-      );
+      showError(getApiErrorMessage(error, 'Failed to remove address.'));
       return false;
     }
   }, []);
@@ -226,14 +555,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         await reviewApi.create(payload);
         const nextReviews = await reviewApi.listMine();
         setReviews(Array.isArray(nextReviews) ? nextReviews : []);
-        Alert.alert('Success', 'Review added successfully.');
+        showSuccess('Review added successfully.');
         return true;
       } catch (error: any) {
         console.log('addReview error:', error?.response?.data || error?.message);
-        Alert.alert(
-          'Unable to add review',
-          getApiErrorMessage(error, 'Failed to add review.')
-        );
+        showError(getApiErrorMessage(error, 'Failed to add review.'));
         return false;
       }
     },
@@ -252,14 +578,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         await reviewApi.update(id, payload);
         const nextReviews = await reviewApi.listMine();
         setReviews(Array.isArray(nextReviews) ? nextReviews : []);
-        Alert.alert('Success', 'Review updated successfully.');
+        showSuccess('Review updated successfully.');
         return true;
       } catch (error: any) {
         console.log('updateReview error:', error?.response?.data || error?.message);
-        Alert.alert(
-          'Unable to update review',
-          getApiErrorMessage(error, 'Failed to update review.')
-        );
+        showError(getApiErrorMessage(error, 'Failed to update review.'));
         return false;
       }
     },
@@ -276,16 +599,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
 
-      Alert.alert('Success', 'Product added to cart.');
+      showSuccess('Product added to cart.');
       return true;
     } catch (error: any) {
       console.log('addToCart error:', error?.response?.data || error?.message);
-
-      Alert.alert(
-        'Unable to add to cart',
-        getApiErrorMessage(error, 'Failed to add item to cart.')
-      );
-
+      showError(getApiErrorMessage(error, 'Failed to add item to cart.'));
       return false;
     }
   }, []);
@@ -294,8 +612,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     try {
       if (quantity < 1) {
         await cartApi.removeItem(itemId);
+        showInfo('Item removed from cart.');
       } else {
         await cartApi.updateItem(itemId, { quantity });
+        showSuccess('Cart updated.');
       }
 
       const nextCartItems = await cartApi.listItems();
@@ -303,12 +623,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (error: any) {
       console.log('updateCartQty error:', error?.response?.data || error?.message);
-
-      Alert.alert(
-        'Unable to update cart',
-        getApiErrorMessage(error, 'Failed to update cart item.')
-      );
-
+      showError(getApiErrorMessage(error, 'Failed to update cart item.'));
       return false;
     }
   }, []);
@@ -319,15 +634,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
+      showSuccess('Item removed from cart.');
       return true;
     } catch (error: any) {
       console.log('removeCartItem error:', error?.response?.data || error?.message);
-
-      Alert.alert(
-        'Unable to remove item',
-        getApiErrorMessage(error, 'Failed to remove item from cart.')
-      );
-
+      showError(getApiErrorMessage(error, 'Failed to remove item from cart.'));
       return false;
     }
   }, []);
@@ -339,8 +651,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       if (existing) {
         await wishlistApi.removeItem(existing.id);
+        showInfo('Removed from wishlist.');
       } else {
         await wishlistApi.addItem({ product_id: productId });
+        showSuccess('Added to wishlist.');
       }
 
       const nextWishlistItems = await wishlistApi.listItems();
@@ -348,94 +662,125 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (error: any) {
       console.log('toggleWishlist error:', error?.response?.data || error?.message);
-
-      Alert.alert(
-        'Wishlist error',
-        getApiErrorMessage(error, 'Failed to update wishlist.')
-      );
-
+      showError(getApiErrorMessage(error, 'Failed to update wishlist.'));
       return false;
     }
   }, []);
 
-  // const checkout = useCallback(
-  //   async ({ address_id }: { address_id: number }) => {
-  //     if (!cartItems.length) {
-  //       throw new Error('Your cart is empty.');
-  //     }
-
-  //     if (!address_id) {
-  //       throw new Error('Please select a delivery address.');
-  //     }
-
-  //     const selectedAddress = addresses.find((item) => item.id === address_id);
-  //     if (!selectedAddress) {
-  //       throw new Error('Selected address was not found.');
-  //     }
-
-  //     const order = await orderApi.create({
-  //       slug: orderSlug(),
-  //       description: 'Placed from mobile app',
-  //       address_id,
-  //     });
-
-  //     for (const item of cartItems) {
-  //       await orderApi.addItem({
-  //         order: order.id,
-  //         product: item.product.id,
-  //         variant: item.variant.id,
-  //         quantity: item.quantity,
-  //       });
-
-  //       await cartApi.removeItem(item.id);
-  //     }
-
-  //     const [nextOrders, nextCartItems] = await Promise.all([
-  //       orderApi.list(),
-  //       cartApi.listItems(),
-  //     ]);
-
-  //     setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-  //     setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
-  //     return order;
-  //   },
-  //   [addresses, cartItems]
-  // );
-
-
   const checkout = useCallback(
-  async ({ address_id }: { address_id: number }) => {
-    if (!cartItems.length) {
-      throw new Error('Your cart is empty.');
+    async ({ address_id }: { address_id: number }) => {
+      if (!cartItems.length) {
+        throw new Error('Your cart is empty.');
+      }
+
+      if (!address_id) {
+        throw new Error('Please select a delivery address.');
+      }
+
+      const selectedAddress = addresses.find((item) => item.id === address_id);
+      if (!selectedAddress) {
+        throw new Error('Selected address was not found.');
+      }
+
+      const order = await orderApi.checkout({
+        address_id,
+        description: 'Placed from mobile app',
+      });
+
+      const [nextOrders, nextCartItems] = await Promise.all([
+        orderApi.list(),
+        cartApi.listItems(),
+      ]);
+
+      if (isPaginatedResponse<Order>(nextOrders)) {
+        applyOrdersPage(nextOrders, 'replace');
+      } else {
+        setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+        setTotalOrders(Array.isArray(nextOrders) ? nextOrders.length : 0);
+        setNextOrdersUrl(null);
+        setHasMoreOrders(false);
+      }
+
+      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      showSuccess('Checkout completed successfully.');
+
+      return order;
+    },
+    [addresses, cartItems, applyOrdersPage]
+  );
+
+  const markNotificationRead = useCallback(async (id: number) => {
+    try {
+      setMarkingNotificationIds((current) => {
+        const safeCurrent = Array.isArray(current) ? current : [];
+        return safeCurrent.includes(id) ? safeCurrent : [...safeCurrent, id];
+      });
+
+      const updated = await notificationApi.markRead(id);
+
+      setNotifications((current) => {
+        const safeCurrent = Array.isArray(current) ? current : [];
+        return safeCurrent.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                ...(updated ?? {}),
+                is_read: true,
+                read_at:
+                  updated?.read_at ??
+                  item.read_at ??
+                  new Date().toISOString(),
+              }
+            : item
+        );
+      });
+
+      return true;
+    } catch (error: any) {
+      console.log(
+        'markNotificationRead error:',
+        error?.response?.data || error?.message
+      );
+      showError('Failed to mark notification as read.');
+      return false;
+    } finally {
+      setMarkingNotificationIds((current) => {
+        const safeCurrent = Array.isArray(current) ? current : [];
+        return safeCurrent.filter((item) => item !== id);
+      });
     }
+  }, []);
 
-    if (!address_id) {
-      throw new Error('Please select a delivery address.');
+  const markAllNotificationsRead = useCallback(async () => {
+    try {
+      setMarkingAllNotifications(true);
+
+      await notificationApi.markAllRead();
+
+      const now = new Date().toISOString();
+
+      setNotifications((current) => {
+        const safeCurrent = Array.isArray(current) ? current : [];
+        return safeCurrent.map((item) => ({
+          ...item,
+          is_read: true,
+          read_at: item.read_at ?? now,
+        }));
+      });
+
+      showSuccess('All notifications marked as read.');
+      return true;
+    } catch (error: any) {
+      console.log(
+        'markAllNotificationsRead error:',
+        error?.response?.data || error?.message
+      );
+      showError('Failed to mark all notifications as read.');
+      return false;
+    } finally {
+      setMarkingAllNotifications(false);
     }
-
-    const selectedAddress = addresses.find((item) => item.id === address_id);
-    if (!selectedAddress) {
-      throw new Error('Selected address was not found.');
-    }
-
-    const order = await orderApi.checkout({
-      address_id,
-      description: 'Placed from mobile app',
-    });
-
-    const [nextOrders, nextCartItems] = await Promise.all([
-      orderApi.list(),
-      cartApi.listItems(),
-    ]);
-
-    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
-    return order;
-  },
-  [addresses, cartItems]
-);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -445,11 +790,27 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cartItems,
       wishlistItems,
       orders,
+      totalOrders,
+      hasMoreOrders,
+      loadingOrders,
+      loadingMoreOrders,
+      refreshingOrders,
       reviews,
       addresses,
       notifications,
+      totalNotifications,
+      hasMoreNotifications,
+      loadingNotifications,
+      loadingMoreNotifications,
+      refreshingNotifications,
       loadCatalog,
       loadAuthedData,
+      loadOrders,
+      loadMoreOrders,
+      refreshOrders,
+      loadNotifications,
+      loadMoreNotifications,
+      refreshNotifications,
       addAddress,
       updateAddress,
       removeAddress,
@@ -460,6 +821,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       removeCartItem,
       toggleWishlist,
       checkout,
+      markNotificationRead,
+      markAllNotificationsRead,
+      markingNotificationIds,
+      markingAllNotifications,
     }),
     [
       loading,
@@ -468,11 +833,27 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       cartItems,
       wishlistItems,
       orders,
+      totalOrders,
+      hasMoreOrders,
+      loadingOrders,
+      loadingMoreOrders,
+      refreshingOrders,
       reviews,
       addresses,
       notifications,
+      totalNotifications,
+      hasMoreNotifications,
+      loadingNotifications,
+      loadingMoreNotifications,
+      refreshingNotifications,
       loadCatalog,
       loadAuthedData,
+      loadOrders,
+      loadMoreOrders,
+      refreshOrders,
+      loadNotifications,
+      loadMoreNotifications,
+      refreshNotifications,
       addAddress,
       updateAddress,
       removeAddress,
@@ -483,6 +864,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       removeCartItem,
       toggleWishlist,
       checkout,
+      markNotificationRead,
+      markAllNotificationsRead,
+      markingNotificationIds,
+      markingAllNotifications,
     ]
   );
 
