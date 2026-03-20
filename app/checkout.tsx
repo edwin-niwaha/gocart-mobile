@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -11,6 +10,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
+
 import { AuthGate } from '@/components/AuthGate';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
@@ -56,6 +57,36 @@ const EMPTY_FORM: AddressFormValues = {
   is_default: false,
 };
 
+const showSuccess = (message: string) => {
+  Toast.show({
+    type: 'success',
+    text1: 'Success',
+    text2: message,
+    position: 'top',
+    visibilityTime: 3000,
+  });
+};
+
+const showError = (message: string) => {
+  Toast.show({
+    type: 'error',
+    text1: 'Error',
+    text2: message,
+    position: 'top',
+    visibilityTime: 4000,
+  });
+};
+
+const showInfo = (message: string) => {
+  Toast.show({
+    type: 'info',
+    text1: 'Info',
+    text2: message,
+    position: 'top',
+    visibilityTime: 3000,
+  });
+};
+
 function AddressFormModal({
   visible,
   loading,
@@ -90,12 +121,12 @@ function AddressFormModal({
     const additionalInformation = form.additional_information.trim();
 
     if (!streetName) {
-      Alert.alert('Missing field', 'Street name / building / apartment is required.');
+      showInfo('Street name / building / apartment is required.');
       return;
     }
 
     if (!city) {
-      Alert.alert('Missing field', 'City is required.');
+      showInfo('City is required.');
       return;
     }
 
@@ -104,10 +135,7 @@ function AddressFormModal({
       additionalTelephone &&
       phoneNumber === additionalTelephone
     ) {
-      Alert.alert(
-        'Invalid phone numbers',
-        'Additional telephone must be different from phone number.'
-      );
+      showError('Additional telephone must be different from phone number.');
       return;
     }
 
@@ -336,7 +364,8 @@ export default function CheckoutScreen() {
     () =>
       cartItems.reduce(
         (sum, item) =>
-          sum + Number(item.line_total ?? Number(item.variant?.price || 0) * item.quantity),
+          sum +
+          Number(item.line_total ?? Number(item.variant?.price || 0) * item.quantity),
         0
       ),
     [cartItems]
@@ -379,12 +408,12 @@ export default function CheckoutScreen() {
       }
 
       closeAddAddress();
+      showSuccess('Address saved successfully.');
     } catch (error: any) {
-      Alert.alert(
-        'Failed to save address',
+      showError(
         error?.response?.data?.detail ||
           error?.message ||
-          'Please try again.'
+          'Failed to save address. Please try again.'
       );
     } finally {
       setSavingAddress(false);
@@ -400,27 +429,24 @@ export default function CheckoutScreen() {
 
     try {
       await updateAddress(selectedAddress.id, { is_default: true });
+      showSuccess('Default address updated successfully.');
     } catch (error: any) {
-      Alert.alert(
-        'Failed to update address',
+      showError(
         error?.response?.data?.detail ||
           error?.message ||
-          'Please try again.'
+          'Failed to update address. Please try again.'
       );
     }
   };
 
   const onPlaceOrder = async () => {
     if (!cartItems.length) {
-      Alert.alert('Your cart is empty', 'Add items before checking out.');
+      showInfo('Add items before checking out.');
       return;
     }
 
     if (!selectedAddressId) {
-      Alert.alert(
-        'Address required',
-        'Please select or add a delivery address before placing your order.'
-      );
+      showInfo('Please select or add a delivery address before placing your order.');
       return;
     }
 
@@ -428,17 +454,16 @@ export default function CheckoutScreen() {
     try {
       const order = await checkout({ address_id: selectedAddressId });
 
-      Alert.alert(
-        'Order placed',
-        `Your order ${order.slug} was created successfully.`,
-        [{ text: 'View orders', onPress: () => router.replace('/(tabs)/orders') }]
-      );
+      showSuccess(`Order ${order.slug} placed successfully.`);
+
+      setTimeout(() => {
+        router.replace('/(tabs)/orders');
+      }, 700);
     } catch (error: any) {
-      Alert.alert(
-        'Checkout failed',
+      showError(
         error?.response?.data?.detail ||
           error?.message ||
-          'Please try again.'
+          'Checkout failed. Please try again.'
       );
     } finally {
       setLoading(false);

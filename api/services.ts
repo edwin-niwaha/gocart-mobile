@@ -279,6 +279,7 @@ export const wishlistApi = {
   },
 };
 
+// Orders API
 export const orderApi = {
   async list() {
     try {
@@ -286,6 +287,19 @@ export const orderApi = {
       return normalizeList(data);
     } catch (error: any) {
       console.log('GET /orders/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async checkout(payload: {
+    address_id: number;
+    description?: string;
+  }) {
+    try {
+      const { data } = await api.post<Order>('/orders/checkout/', payload);
+      return data;
+    } catch (error: any) {
+      console.log('POST /orders/checkout/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -320,6 +334,8 @@ export const orderApi = {
   },
 };
 
+
+// Notifications API
 export const notificationApi = {
   async list() {
     try {

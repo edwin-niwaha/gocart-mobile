@@ -358,50 +358,84 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // const checkout = useCallback(
+  //   async ({ address_id }: { address_id: number }) => {
+  //     if (!cartItems.length) {
+  //       throw new Error('Your cart is empty.');
+  //     }
+
+  //     if (!address_id) {
+  //       throw new Error('Please select a delivery address.');
+  //     }
+
+  //     const selectedAddress = addresses.find((item) => item.id === address_id);
+  //     if (!selectedAddress) {
+  //       throw new Error('Selected address was not found.');
+  //     }
+
+  //     const order = await orderApi.create({
+  //       slug: orderSlug(),
+  //       description: 'Placed from mobile app',
+  //       address_id,
+  //     });
+
+  //     for (const item of cartItems) {
+  //       await orderApi.addItem({
+  //         order: order.id,
+  //         product: item.product.id,
+  //         variant: item.variant.id,
+  //         quantity: item.quantity,
+  //       });
+
+  //       await cartApi.removeItem(item.id);
+  //     }
+
+  //     const [nextOrders, nextCartItems] = await Promise.all([
+  //       orderApi.list(),
+  //       cartApi.listItems(),
+  //     ]);
+
+  //     setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+  //     setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+
+  //     return order;
+  //   },
+  //   [addresses, cartItems]
+  // );
+
+
   const checkout = useCallback(
-    async ({ address_id }: { address_id: number }) => {
-      if (!cartItems.length) {
-        throw new Error('Your cart is empty.');
-      }
+  async ({ address_id }: { address_id: number }) => {
+    if (!cartItems.length) {
+      throw new Error('Your cart is empty.');
+    }
 
-      if (!address_id) {
-        throw new Error('Please select a delivery address.');
-      }
+    if (!address_id) {
+      throw new Error('Please select a delivery address.');
+    }
 
-      const selectedAddress = addresses.find((item) => item.id === address_id);
-      if (!selectedAddress) {
-        throw new Error('Selected address was not found.');
-      }
+    const selectedAddress = addresses.find((item) => item.id === address_id);
+    if (!selectedAddress) {
+      throw new Error('Selected address was not found.');
+    }
 
-      const order = await orderApi.create({
-        slug: orderSlug(),
-        description: 'Placed from mobile app',
-        address_id,
-      });
+    const order = await orderApi.checkout({
+      address_id,
+      description: 'Placed from mobile app',
+    });
 
-      for (const item of cartItems) {
-        await orderApi.addItem({
-          order: order.id,
-          product: item.product.id,
-          variant: item.variant.id,
-          quantity: item.quantity,
-        });
+    const [nextOrders, nextCartItems] = await Promise.all([
+      orderApi.list(),
+      cartApi.listItems(),
+    ]);
 
-        await cartApi.removeItem(item.id);
-      }
+    setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+    setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
 
-      const [nextOrders, nextCartItems] = await Promise.all([
-        orderApi.list(),
-        cartApi.listItems(),
-      ]);
-
-      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
-      return order;
-    },
-    [addresses, cartItems]
-  );
+    return order;
+  },
+  [addresses, cartItems]
+);
 
   const value = useMemo(
     () => ({

@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { ShopProvider } from '@/providers/ShopProvider';
 import { colors } from '@/constants/theme';
+import Toast from 'react-native-toast-message';
 
 function AppShell() {
   const { ready } = useAuth();
@@ -31,6 +32,8 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <AppShell />
+      <Toast />
     </AuthProvider>
+    
   );
 }
