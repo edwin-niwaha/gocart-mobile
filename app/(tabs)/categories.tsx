@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  FlatList,
   Image,
   Pressable,
   StyleSheet,
@@ -13,35 +15,95 @@ import { Screen } from '@/components/Screen';
 import { EmptyState } from '@/components/EmptyState';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
+import type { Product } from '@/types';
 
 const FALLBACK_CATEGORY =
   'https://via.placeholder.com/300x300.png?text=Category';
+const FALLBACK_PRODUCT =
+  'https://via.placeholder.com/400x300.png?text=Product';
 
 export default function CategoriesScreen() {
-  const { categories, loadCatalog } = useShop();
+  const { categories, products, loadCatalog, loading } = useShop();
   const { width } = useWindowDimensions();
 
-  const gap = 14;
-  const contentPadding = spacing.lg * 2;
-  const cardWidth = (width - contentPadding - gap) / 2;
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+
+  const isTablet = width >= 768;
+  const sidebarWidth = isTablet ? 120 : 95;
+  const layoutGap = 12;
+  const contentWidth = width - spacing.lg * 2 - sidebarWidth - layoutGap;
+  const numColumns = isTablet ? 3 : 2;
+  const cardGap = 10;
+  const cardWidth = (contentWidth - cardGap * (numColumns - 1)) / numColumns;
 
   useEffect(() => {
-    if (!categories.length) {
-      loadCatalog().catch(() => undefined);
-    }
-  }, [categories.length, loadCatalog]);
+    loadCatalog().catch(() => undefined);
+  }, [loadCatalog]);
 
-  const handleCategoryPress = (slug: string) => {
-    router.push({
-      pathname: '/',
-      params: { category: slug },
-    });
+  useEffect(() => {
+    if (!activeCategory && categories.length) {
+      setActiveCategory(categories[0].slug);
+    }
+  }, [categories, activeCategory]);
+
+  const selectedCategory = useMemo(
+    () =>
+      categories.find((category) => category.slug === activeCategory) || null,
+    [categories, activeCategory]
+  );
+
+  const categoryProducts = useMemo(() => {
+    if (!activeCategory) return [];
+    return products.filter(
+      (product) => product.category?.slug === activeCategory
+    );
+  }, [products, activeCategory]);
+
+  const previewProducts = useMemo(
+    () => categoryProducts.slice(0, isTablet ? 6 : 4),
+    [categoryProducts, isTablet]
+  );
+
+  const displayedProducts = showAllProducts ? categoryProducts : previewProducts;
+
+  const getProductImage = (product: Product) =>
+    product.hero_image || product.image_urls?.[0] || FALLBACK_PRODUCT;
+
+  const formatPrice = (price: string | number) =>
+    `UGX ${Number(price || 0).toLocaleString()}`;
+
+  const handleCategorySelect = (slug: string) => {
+    setActiveCategory(slug);
+    setShowAllProducts(false);
+  };
+
+  const renderProduct = ({ item }: { item: Product }) => {
+    return (
+      <Pressable
+        onPress={() => router.push(`/product/${item.slug}`)}
+        style={[styles.productCard, { width: cardWidth }]}
+      >
+        <Image
+          source={{ uri: getProductImage(item) }}
+          style={styles.productImage}
+        />
+
+        <View style={styles.productBody}>
+          <Text numberOfLines={2} style={styles.productTitle}>
+            {item.title}
+          </Text>
+
+          <Text style={styles.productPrice}>{formatPrice(item.base_price)}</Text>
+        </View>
+      </Pressable>
+    );
   };
 
   return (
     <Screen scroll>
       <View style={styles.container}>
-        {!categories.length ? (
+        {!loading && !categories.length ? (
           <EmptyState
             title="No categories yet"
             subtitle="Create categories in Django and they will appear here."
@@ -49,54 +111,156 @@ export default function CategoriesScreen() {
         ) : (
           <>
             <View style={styles.topRow}>
+              <Text style={styles.pageTitle}>Categories</Text>
               <Text style={styles.resultText}>
                 {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}
               </Text>
             </View>
 
-            <View style={styles.grid}>
-              {categories.map((category) => (
-                <Pressable
-                  key={category.id}
-                  onPress={() => handleCategoryPress(category.slug)}
-                  style={({ pressed }) => [
-                    styles.card,
-                    { width: cardWidth },
-                    pressed && styles.cardPressed,
-                  ]}
-                >
-                  <Image
-                    source={{ uri: category.image_url || FALLBACK_CATEGORY }}
-                    style={styles.image}
-                  />
+            {loading && !categories.length ? (
+              <ActivityIndicator size="large" color={colors.primary} />
+            ) : (
+              <View style={styles.layout}>
+                <View style={[styles.sidebar, { width: sidebarWidth }]}>
+                  {categories.map((category) => {
+                    const active = category.slug === activeCategory;
 
-                  <View style={styles.imageOverlay} />
+                    return (
+                      <Pressable
+                        key={category.id}
+                        onPress={() => handleCategorySelect(category.slug)}
+                        style={[
+                          styles.categoryItem,
+                          active && styles.categoryItemActive,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.categoryThumbWrap,
+                            active && styles.categoryThumbWrapActive,
+                          ]}
+                        >
+                          <Image
+                            source={{
+                              uri: category.image_url || FALLBACK_CATEGORY,
+                            }}
+                            style={styles.categoryThumb}
+                          />
+                        </View>
 
-                  <View style={styles.cardContent}>
-                    <View style={styles.iconBadge}>
-                      <Ionicons name="grid-outline" size={14} color="#fff" />
-                    </View>
-
-                    <View style={styles.cardFooter}>
-                      <View style={styles.textWrap}>
-                        <Text numberOfLines={2} style={styles.name}>
+                        <Text
+                          numberOfLines={2}
+                          style={[
+                            styles.categoryLabel,
+                            active && styles.categoryLabelActive,
+                          ]}
+                        >
                           {category.name}
                         </Text>
-                        <Text style={styles.hint}>Explore products</Text>
+
+                        {active ? <View style={styles.activeBar} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.content}>
+                  {selectedCategory ? (
+                    <>
+                      <View style={styles.categoryHero}>
+                        <Image
+                          source={{
+                            uri: selectedCategory.image_url || FALLBACK_CATEGORY,
+                          }}
+                          style={styles.categoryHeroImage}
+                        />
+                        <View style={styles.categoryHeroOverlay} />
+
+                        <View style={styles.categoryHeroContent}>
+                          <View style={styles.heroBadge}>
+                            <Ionicons
+                              name="grid-outline"
+                              size={12}
+                              color="#fff"
+                            />
+                            <Text style={styles.heroBadgeText}>Category</Text>
+                          </View>
+
+                          <Text style={styles.categoryHeroTitle}>
+                            {selectedCategory.name}
+                          </Text>
+
+                          <Text style={styles.categoryHeroSubtitle}>
+                            {showAllProducts
+                              ? 'All products in this category'
+                              : 'Browse products in this category'}
+                          </Text>
+
+                          <Pressable
+                            onPress={() => setShowAllProducts((prev) => !prev)}
+                            style={styles.exploreButton}
+                          >
+                            <Text style={styles.exploreButtonText}>
+                              {showAllProducts ? 'Show less' : 'View all'}
+                            </Text>
+                            <Ionicons
+                              name={
+                                showAllProducts
+                                  ? 'chevron-up-outline'
+                                  : 'arrow-forward'
+                              }
+                              size={14}
+                              color="#fff"
+                            />
+                          </Pressable>
+                        </View>
                       </View>
 
-                      <View style={styles.arrowCircle}>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={16}
-                          color={colors.text}
-                        />
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>
+                          {showAllProducts ? 'All Products' : 'Featured Products'}
+                        </Text>
+                        <Text style={styles.sectionSubtitle}>
+                          {displayedProducts.length} item
+                          {displayedProducts.length === 1 ? '' : 's'}
+                          {!showAllProducts && categoryProducts.length > displayedProducts.length
+                            ? ` of ${categoryProducts.length}`
+                            : ''}
+                        </Text>
                       </View>
-                    </View>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+
+                      <FlatList
+                        data={displayedProducts}
+                        key={numColumns}
+                        numColumns={numColumns}
+                        scrollEnabled={false}
+                        keyExtractor={(item) => String(item.id)}
+                        columnWrapperStyle={
+                          numColumns > 1 ? styles.row : undefined
+                        }
+                        contentContainerStyle={styles.productList}
+                        renderItem={renderProduct}
+                        ListEmptyComponent={
+                          <View style={styles.emptyProducts}>
+                            <Text style={styles.emptyProductsTitle}>
+                              No products in this category
+                            </Text>
+                            <Text style={styles.emptyProductsText}>
+                              Add products in Django and they will appear here.
+                            </Text>
+                          </View>
+                        }
+                      />
+                    </>
+                  ) : (
+                    <EmptyState
+                      title="No category selected"
+                      subtitle="Choose a category from the left."
+                    />
+                  )}
+                </View>
+              </View>
+            )}
           </>
         )}
       </View>
@@ -106,14 +270,21 @@ export default function CategoriesScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: spacing.xl,
     gap: spacing.md,
+    paddingBottom: spacing.xl,
   },
 
   topRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
+  },
+
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
   },
 
   resultText: {
@@ -128,93 +299,227 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 
-  grid: {
+  layout: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 14,
+    alignItems: 'flex-start',
+    gap: 12,
   },
 
-  card: {
-    height: 210,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: colors.surface,
+  sidebar: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    overflow: 'hidden',
   },
 
-  cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+  categoryItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    position: 'relative',
+    backgroundColor: '#fff',
   },
 
-  image: {
-    ...StyleSheet.absoluteFillObject,
+  categoryItemActive: {
+    backgroundColor: '#FFF7ED',
+  },
+
+  categoryThumbWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  categoryThumbWrapActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+
+  categoryThumb: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
 
-  imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+  categoryLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 
-  cardContent: {
+  categoryLabelActive: {
+    color: colors.primary,
+  },
+
+  activeBar: {
+    position: 'absolute',
+    right: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderTopLeftRadius: 999,
+    borderBottomLeftRadius: 999,
+    backgroundColor: colors.primary,
+  },
+
+  content: {
     flex: 1,
-    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  categoryHero: {
+    height: 180,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'flex-end',
+  },
+
+  categoryHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+
+  categoryHeroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+
+  categoryHeroContent: {
     padding: 14,
+    gap: 8,
   },
 
-  iconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  cardFooter: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  heroBadge: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
 
-  textWrap: {
-    flex: 1,
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  categoryHeroTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+
+  categoryHeroSubtitle: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 13,
+  },
+
+  exploreButton: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+
+  exploreButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+
+  sectionHeader: {
     gap: 2,
   },
 
-  name: {
-    fontSize: 15,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '800',
     color: colors.text,
   },
 
-  hint: {
+  sectionSubtitle: {
     fontSize: 12,
     color: colors.muted,
-    fontWeight: '600',
   },
 
-  arrowCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primarySoft,
+  productList: {
+    paddingBottom: spacing.xl,
+  },
+
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+
+  productCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+    marginBottom: 10,
+  },
+
+  productImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'cover',
+  },
+
+  productBody: {
+    padding: 10,
+    gap: 6,
+  },
+
+  productTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    minHeight: 34,
+  },
+
+  productPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+
+  emptyProducts: {
+    paddingVertical: spacing.xl,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+  },
+
+  emptyProductsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  emptyProductsText: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
   },
 });
