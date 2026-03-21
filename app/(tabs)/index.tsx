@@ -3,9 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  FlatList,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,7 +19,7 @@ import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
-import type { Product } from '@/types';
+import type { Category, Product } from '@/types';
 
 const FALLBACK_HERO =
   'https://via.placeholder.com/1200x600.png?text=GoCart+Mobile';
@@ -27,6 +27,46 @@ const FALLBACK_PRODUCT =
   'https://via.placeholder.com/400x300.png?text=Product';
 const FALLBACK_CATEGORY =
   'https://via.placeholder.com/200x200.png?text=Category';
+
+type ProductCategoryShape =
+  | {
+      id?: number;
+      name?: string;
+      slug?: string;
+      image_url?: string | null;
+    }
+  | number
+  | string
+  | null
+  | undefined;
+
+type ProductVariantShape = {
+  id: number;
+  name?: string;
+  sku?: string;
+  is_active?: boolean;
+  is_in_stock?: boolean;
+  stock_quantity?: number;
+  price?: string | number;
+};
+
+function dedupeVariants(variants: ProductVariantShape[] = []) {
+  const seenIds = new Set<number>();
+  const seenKeys = new Set<string>();
+
+  return variants.filter((variant) => {
+    if (typeof variant.id === 'number') {
+      if (seenIds.has(variant.id)) return false;
+      seenIds.add(variant.id);
+      return true;
+    }
+
+    const fallbackKey = `${variant.name ?? ''}-${variant.sku ?? ''}-${variant.price ?? ''}`;
+    if (seenKeys.has(fallbackKey)) return false;
+    seenKeys.add(fallbackKey);
+    return true;
+  });
+}
 
 export default function HomeScreen() {
   const {
@@ -45,6 +85,10 @@ export default function HomeScreen() {
   const [query, setQuery] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
   const [addingProductId, setAddingProductId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(
+    null
+  );
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -54,12 +98,21 @@ export default function HomeScreen() {
   const horizontalPadding = spacing.lg * 2;
   const gridCardWidth =
     (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
-  const horizontalProductCardWidth = isTablet ? 220 : 160;
-  const categoryCardWidth = isTablet ? 92 : 78;
+  const horizontalProductCardWidth = isTablet ? 220 : 168;
+  const categoryCardWidth = isTablet ? 94 : 82;
 
   useEffect(() => {
     loadCatalog().catch(() => undefined);
   }, [loadCatalog]);
+
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await loadCatalog();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const heroSlides = useMemo(() => {
     const featuredImages = products
@@ -104,17 +157,119 @@ export default function HomeScreen() {
     ]).start();
   }, [heroIndex, fadeAnim]);
 
+  const getCategoryName = (category: ProductCategoryShape) => {
+    if (!category) return '';
+    if (typeof category === 'object' && 'name' in category) {
+      return category.name || '';
+    }
+    return '';
+  };
+
+  const getCategorySlug = (category: ProductCategoryShape) => {
+    if (!category) return '';
+    if (typeof category === 'object' && 'slug' in category) {
+      return category.slug || '';
+    }
+    return '';
+  };
+
+  const getVariantsSearchText = (product: Product) => {
+    const variants = (product.variants || []) as ProductVariantShape[];
+
+    return variants
+      .map((variant) => [variant.name || '', variant.sku || ''].join(' '))
+      .join(' ');
+  };
+
+  const getImage = (item: Product) =>
+    item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
+
+  const getActiveVariants = (product: Product) => {
+    const variants = (product.variants || []) as ProductVariantShape[];
+    return dedupeVariants(variants.filter((variant) => variant.is_active));
+  };
+
+  const getPurchasableVariants = (product: Product) =>
+    getActiveVariants(product).filter((variant) => variant.is_in_stock);
+
+  const getProductStockInfo = (product: Product) => {
+    const activeVariants = getActiveVariants(product);
+    const purchasableVariants = getPurchasableVariants(product);
+
+    const fallbackOutOfStock =
+      activeVariants.length === 0 ? !product.is_in_stock : false;
+
+    const isOutOfStock =
+      activeVariants.length > 0
+        ? purchasableVariants.length === 0
+        : fallbackOutOfStock;
+
+    const primaryVariant =
+      purchasableVariants[0] || activeVariants[0] || null;
+
+    const hasSinglePurchasableVariant = purchasableVariants.length === 1;
+    const hasMultipleActiveVariants = activeVariants.length > 1;
+
+    return {
+      activeVariants,
+      purchasableVariants,
+      primaryVariant,
+      isOutOfStock,
+      hasSinglePurchasableVariant,
+      hasMultipleActiveVariants,
+      buttonLabel: isOutOfStock
+        ? 'Out of stock'
+        : hasSinglePurchasableVariant
+          ? 'Add'
+          : 'Select',
+      buttonIcon: isOutOfStock
+        ? 'close-circle-outline'
+        : hasSinglePurchasableVariant
+          ? 'cart-outline'
+          : 'options-outline',
+    };
+  };
+
+  const getProductSubtitle = (product: Product) => {
+    const categoryName = getCategoryName(product.category as ProductCategoryShape);
+    const { activeVariants } = getProductStockInfo(product);
+
+    if (!activeVariants.length) return categoryName || 'Unavailable';
+    if (activeVariants.length === 1) {
+      return categoryName || activeVariants[0].name || '';
+    }
+
+    return categoryName
+      ? `${categoryName} • ${activeVariants.length} options`
+      : `${activeVariants.length} options`;
+  };
+
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     return products.filter((product) => {
+      const matchesCategory = selectedCategorySlug
+        ? getCategorySlug(product.category as ProductCategoryShape) ===
+          selectedCategorySlug
+        : true;
+
+      if (!matchesCategory) return false;
       if (!normalizedQuery) return true;
 
-      return `${product.title} ${product.description || ''}`
-        .toLowerCase()
-        .includes(normalizedQuery);
+      const searchableText = [
+        product.title || '',
+        product.slug || '',
+        product.description || '',
+        getCategoryName(product.category as ProductCategoryShape),
+        getCategorySlug(product.category as ProductCategoryShape),
+        getVariantsSearchText(product),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalizedQuery);
     });
-  }, [products, query]);
+  }, [products, query, selectedCategorySlug]);
 
   const featuredProducts = useMemo(
     () => products.filter((product) => product.is_featured).slice(0, 10),
@@ -124,65 +279,183 @@ export default function HomeScreen() {
   const newArrivals = useMemo(() => {
     return [...products]
       .sort((a, b) => {
-        const aDate = new Date(
-          (a as Product & { created_at?: string }).created_at || 0
-        ).getTime();
-        const bDate = new Date(
-          (b as Product & { created_at?: string }).created_at || 0
-        ).getTime();
+        const aDate = new Date((a.created_at || '') as string).getTime();
+        const bDate = new Date((b.created_at || '') as string).getTime();
         return bDate - aDate;
       })
       .slice(0, 10);
   }, [products]);
 
-  const allProducts = filteredProducts;
-
   const quickCategories = useMemo(() => categories.slice(0, 8), [categories]);
+
+  const inStockCount = useMemo(
+    () =>
+      filteredProducts.filter((product) => {
+        const { isOutOfStock } = getProductStockInfo(product);
+        return !isOutOfStock;
+      }).length,
+    [filteredProducts]
+  );
 
   const formatPrice = (price: string | number) =>
     `UGX ${Number(price || 0).toLocaleString()}`;
 
-  const getImage = (item: Product) =>
-    item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
+  const handleProductAction = async (product: Product) => {
+    const {
+      isOutOfStock,
+      hasSinglePurchasableVariant,
+      hasMultipleActiveVariants,
+      primaryVariant,
+    } = getProductStockInfo(product);
 
-  const getActiveVariants = (product: Product) =>
-    product.variants?.filter((variant) => variant.is_active) || [];
-
-  const handleAddToCart = async (product: Product) => {
-    const activeVariants = getActiveVariants(product);
-
-    if (!activeVariants.length) {
-      Alert.alert('Unavailable', 'This product is currently unavailable.');
+    if (isOutOfStock) {
+      Alert.alert('Out of stock', 'This product is currently unavailable.');
       return;
     }
 
-    if (activeVariants.length > 1) {
+    if (hasMultipleActiveVariants) {
+      router.push(`/product/${product.slug}`);
+      return;
+    }
+
+    if (!hasSinglePurchasableVariant || !primaryVariant) {
       router.push(`/product/${product.slug}`);
       return;
     }
 
     try {
       setAddingProductId(product.id);
-      await addToCart(activeVariants[0].id, 1);
+      await addToCart(primaryVariant.id, 1);
     } finally {
       setAddingProductId(null);
     }
+  };
+
+  const toggleCategoryFilter = (category: Category) => {
+    setSelectedCategorySlug((current) =>
+      current === category.slug ? null : category.slug
+    );
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setSelectedCategorySlug(null);
+  };
+
+  const renderFilterChips = () => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterRow}
+    >
+      <Pressable
+        onPress={() => setSelectedCategorySlug(null)}
+        style={[
+          styles.filterChip,
+          !selectedCategorySlug && styles.filterChipActive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            !selectedCategorySlug && styles.filterChipTextActive,
+          ]}
+        >
+          All
+        </Text>
+      </Pressable>
+
+      {quickCategories.map((category) => {
+        const active = selectedCategorySlug === category.slug;
+
+        return (
+          <Pressable
+            key={category.id}
+            onPress={() => toggleCategoryFilter(category)}
+            style={[styles.filterChip, active && styles.filterChipActive]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                active && styles.filterChipTextActive,
+              ]}
+            >
+              {category.name}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+
+  const renderStockText = (product: Product) => {
+    const { isOutOfStock, hasMultipleActiveVariants, activeVariants } =
+      getProductStockInfo(product);
+
+    if (isOutOfStock) {
+      return <Text style={styles.outOfStockText}>Out of stock</Text>;
+    }
+
+    if (hasMultipleActiveVariants) {
+      return (
+        <Text style={styles.variantHint}>
+          Choose from {activeVariants.length} variants
+        </Text>
+      );
+    }
+
+    return <Text style={styles.inStockText}>In stock</Text>;
+  };
+
+  const renderActionButton = (
+    item: Product,
+    style: object,
+    textStyle: object,
+    iconSize: number
+  ) => {
+    const { isOutOfStock, buttonLabel, buttonIcon } = getProductStockInfo(item);
+    const isAdding = addingProductId === item.id;
+
+    return (
+      <Pressable
+        style={[
+          style,
+          (isOutOfStock || isAdding) && styles.cartBtnDisabled,
+        ]}
+        disabled={isOutOfStock || isAdding}
+        onPress={() =>
+          protectedAction(async () => {
+            await handleProductAction(item);
+          })
+        }
+      >
+        {isAdding ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons
+              name={buttonIcon as keyof typeof Ionicons.glyphMap}
+              size={iconSize}
+              color="#fff"
+            />
+            <Text style={textStyle}>{buttonLabel}</Text>
+          </>
+        )}
+      </Pressable>
+    );
   };
 
   const renderGridProduct = ({ item }: { item: Product }) => {
     const wished = wishlistItems.some(
       (wishlistItem) => wishlistItem.product.id === item.id
     );
-    const activeVariants = getActiveVariants(item);
-    const isAdding = addingProductId === item.id;
-    const hasSingleVariant = activeVariants.length === 1;
 
     return (
       <View style={[styles.gridCard, { width: gridCardWidth }]}>
         <Pressable onPress={() => router.push(`/product/${item.slug}`)}>
           <Image
             source={{ uri: getImage(item) }}
-            style={[styles.gridCardImage, { height: isTablet ? 165 : 135 }]}
+            style={[styles.gridCardImage, { height: isTablet ? 168 : 140 }]}
           />
         </Pressable>
 
@@ -201,10 +474,19 @@ export default function HomeScreen() {
           />
         </Pressable>
 
+        {item.is_featured ? (
+          <View style={styles.featuredPill}>
+            <Text style={styles.featuredPillText}>Featured</Text>
+          </View>
+        ) : null}
+
         <View style={styles.gridCardBody}>
           <Pressable onPress={() => router.push(`/product/${item.slug}`)}>
             <Text numberOfLines={1} style={styles.gridCardTitle}>
               {item.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.gridCardSubtitle}>
+              {getProductSubtitle(item)}
             </Text>
           </Pressable>
 
@@ -212,46 +494,11 @@ export default function HomeScreen() {
             <Text style={styles.gridCardPrice}>
               {formatPrice(item.base_price)}
             </Text>
-
-            {activeVariants.length > 1 ? (
-              <Text style={styles.variantHint}>
-                {activeVariants.length} options
-              </Text>
-            ) : null}
-
-            {!activeVariants.length ? (
-              <Text style={styles.outOfStockText}>Out of stock</Text>
-            ) : null}
+            {renderStockText(item)}
           </View>
 
           <View style={styles.gridCardFooter}>
-            <Pressable
-              style={[
-                styles.cartBtn,
-                (!activeVariants.length || isAdding) && styles.cartBtnDisabled,
-              ]}
-              disabled={!activeVariants.length || isAdding}
-              onPress={() =>
-                protectedAction(async () => {
-                  await handleAddToCart(item);
-                })
-              }
-            >
-              {isAdding ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={hasSingleVariant ? 'cart-outline' : 'options-outline'}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.cartBtnText}>
-                    {hasSingleVariant ? 'Add' : 'Select'}
-                  </Text>
-                </>
-              )}
-            </Pressable>
+            {renderActionButton(item, styles.cartBtn, styles.cartBtnText, 16)}
           </View>
         </View>
       </View>
@@ -262,12 +509,12 @@ export default function HomeScreen() {
     const wished = wishlistItems.some(
       (wishlistItem) => wishlistItem.product.id === item.id
     );
-    const activeVariants = getActiveVariants(item);
-    const isAdding = addingProductId === item.id;
-    const hasSingleVariant = activeVariants.length === 1;
 
     return (
-      <View key={item.id} style={[styles.horizontalCard, { width: horizontalProductCardWidth }]}>
+      <View
+        key={item.id}
+        style={[styles.horizontalCard, { width: horizontalProductCardWidth }]}
+      >
         <Pressable onPress={() => router.push(`/product/${item.slug}`)}>
           <Image
             source={{ uri: getImage(item) }}
@@ -295,240 +542,269 @@ export default function HomeScreen() {
             <Text numberOfLines={2} style={styles.horizontalCardTitle}>
               {item.title}
             </Text>
+            <Text numberOfLines={1} style={styles.horizontalCardSubtitle}>
+              {getProductSubtitle(item)}
+            </Text>
           </Pressable>
 
           <Text style={styles.horizontalCardPrice}>
             {formatPrice(item.base_price)}
           </Text>
 
-          <Pressable
-            style={[
-              styles.smallCartBtn,
-              (!activeVariants.length || isAdding) && styles.cartBtnDisabled,
-            ]}
-            disabled={!activeVariants.length || isAdding}
-            onPress={() =>
-              protectedAction(async () => {
-                await handleAddToCart(item);
-              })
-            }
-          >
-            {isAdding ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons
-                  name={hasSingleVariant ? 'cart-outline' : 'options-outline'}
-                  size={14}
-                  color="#fff"
-                />
-                <Text style={styles.smallCartBtnText}>
-                  {hasSingleVariant ? 'Add' : 'Select'}
-                </Text>
-              </>
-            )}
-          </Pressable>
+          {renderStockText(item)}
+
+          {renderActionButton(
+            item,
+            styles.smallCartBtn,
+            styles.smallCartBtnText,
+            14
+          )}
         </View>
       </View>
     );
   };
 
+  const hasActiveFilters = Boolean(query.trim() || selectedCategorySlug);
+
   return (
     <Screen scroll>
-      <View style={styles.container}>
-        <View style={[styles.hero, { minHeight: isTablet ? 250 : 210 }]}>
-          <Animated.Image
-            source={{ uri: heroSlides[heroIndex] || FALLBACK_HERO }}
-            style={[styles.heroBg, { opacity: fadeAnim }]}
-          />
-          <View style={styles.overlay} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.container}>
+          <View style={[styles.hero, { minHeight: isTablet ? 260 : 220 }]}>
+            <Animated.Image
+              source={{ uri: heroSlides[heroIndex] || FALLBACK_HERO }}
+              style={[styles.heroBg, { opacity: fadeAnim }]}
+            />
+            <View style={styles.overlay} />
 
-          <View style={styles.heroContent}>
-            <Text style={styles.badge}>Featured Picks</Text>
+            <View style={styles.heroContent}>
+              <Text style={styles.badge}>Featured Picks</Text>
 
-            <Text style={[styles.heroTitle, { fontSize: isTablet ? 34 : 27 }]}>
-              Shop smarter, live easier
-            </Text>
+              <Text style={[styles.heroTitle, { fontSize: isTablet ? 34 : 27 }]}>
+                Shop smarter, live easier
+              </Text>
 
-            <Text style={styles.heroText}>
-              Discover quality products, trusted prices, and smooth delivery at
-              your fingertips.
-            </Text>
+              <Text style={styles.heroText}>
+                Discover quality products, trusted prices, and smooth delivery
+                at your fingertips.
+              </Text>
 
-            <View style={styles.heroActions}>
-              <Pressable
-                onPress={() => router.push('/categories')}
-                style={styles.heroPrimaryButton}
-              >
-                <Text style={styles.heroPrimaryButtonText}>Shop now</Text>
-              </Pressable>
-
-              <Link href="/notifications" asChild>
-                <Pressable style={styles.heroSecondaryButton}>
-                  <Text style={styles.heroSecondaryButtonText}>Alerts</Text>
+              <View style={styles.heroActions}>
+                <Pressable
+                  onPress={() => router.push('/categories')}
+                  style={styles.heroPrimaryButton}
+                >
+                  <Text style={styles.heroPrimaryButtonText}>Shop now</Text>
                 </Pressable>
-              </Link>
-            </View>
 
-            {heroSlides.length > 1 ? (
-              <View style={styles.dots}>
-                {heroSlides.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[styles.dot, heroIndex === index && styles.dotActive]}
-                  />
-                ))}
+                <Link href="/notifications" asChild>
+                  <Pressable style={styles.heroSecondaryButton}>
+                    <Text style={styles.heroSecondaryButtonText}>Alerts</Text>
+                  </Pressable>
+                </Link>
               </View>
-            ) : null}
-          </View>
-        </View>
 
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search products..."
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-        />
-
-        <View style={styles.promoRow}>
-          <View style={styles.promoCard}>
-            <View style={styles.promoIconWrap}>
-              <Ionicons name="car-outline" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.promoTextWrap}>
-              <Text style={styles.promoTitle}>Fast Delivery</Text>
-              <Text style={styles.promoText}>Quick shipping on top items</Text>
+              {heroSlides.length > 1 ? (
+                <View style={styles.dots}>
+                  {heroSlides.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[styles.dot, heroIndex === index && styles.dotActive]}
+                    />
+                  ))}
+                </View>
+              ) : null}
             </View>
           </View>
 
-          <View style={styles.promoCard}>
-            <View style={styles.promoIconWrap}>
-              <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
+          <View style={styles.searchBlock}>
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={18} color={colors.muted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search products, category..."
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                returnKeyType="search"
+              />
+              {query.trim() ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={colors.muted} />
+                </Pressable>
+              ) : null}
             </View>
-            <View style={styles.promoTextWrap}>
-              <Text style={styles.promoTitle}>Trusted Quality</Text>
-              <Text style={styles.promoText}>Carefully selected products</Text>
+
+            {renderFilterChips()}
+
+            <View style={styles.searchSummaryRow}>
+              <Text style={styles.searchSummaryText}>
+                {filteredProducts.length} result
+                {filteredProducts.length === 1 ? '' : 's'} • {inStockCount} in
+                stock
+              </Text>
+
+              {hasActiveFilters ? (
+                <Pressable onPress={clearFilters}>
+                  <Text style={styles.clearFiltersText}>Clear</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
-        </View>
 
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Shop by Category</Text>
-            <Text style={styles.sectionSubtitle}>
-              Quick access to popular categories
-            </Text>
-          </View>
+          <View style={styles.promoRow}>
+            <View style={styles.promoCard}>
+              <View style={styles.promoIconWrap}>
+                <Ionicons name="car-outline" size={16} color={colors.primary} />
+              </View>
+              <View style={styles.promoTextWrap}>
+                <Text style={styles.promoTitle}>Fast Delivery</Text>
+                <Text style={styles.promoText}>Quick shipping on top items</Text>
+              </View>
+            </View>
 
-          <Pressable onPress={() => router.push('/categories')}>
-            <Text style={styles.linkText}>See all</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesRow}
-        >
-          {quickCategories.map((category) => (
-            <Pressable
-              key={category.id}
-              onPress={() =>
-                router.push({
-                  pathname: '/categories',
-                  params: { category: category.slug },
-                })
-              }
-              style={[styles.categoryShortcutCard, { width: categoryCardWidth }]}
-            >
-              <View style={styles.categoryShortcutImageWrap}>
-                <Image
-                  source={{ uri: category.image_url || FALLBACK_CATEGORY }}
-                  style={styles.categoryShortcutImage}
+            <View style={styles.promoCard}>
+              <View style={styles.promoIconWrap}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={16}
+                  color={colors.primary}
                 />
               </View>
-              <Text numberOfLines={2} style={styles.categoryShortcutText}>
-                {category.name}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Featured Products</Text>
-            <Text style={styles.sectionSubtitle}>
-              Handpicked items you may love
-            </Text>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalProductsRow}
-        >
-          {(featuredProducts.length ? featuredProducts : products.slice(0, 10)).map(
-            renderHorizontalProductCard
-          )}
-        </ScrollView>
-
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>New Arrivals</Text>
-            <Text style={styles.sectionSubtitle}>
-              Recently added products in store
-            </Text>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalProductsRow}
-        >
-          {(newArrivals.length ? newArrivals : products.slice(0, 10)).map(
-            renderHorizontalProductCard
-          )}
-        </ScrollView>
-
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>
-              {query.trim() ? 'Search Results' : 'All Products'}
-            </Text>
-            <Text style={styles.sectionSubtitle}>
-              {allProducts.length} item{allProducts.length === 1 ? '' : 's'}
-            </Text>
-          </View>
-        </View>
-
-        {loading && !products.length ? (
-          <ActivityIndicator size="large" color={colors.primary} />
-        ) : null}
-
-        <FlatList
-          data={allProducts}
-          key={numColumns}
-          numColumns={numColumns}
-          scrollEnabled={false}
-          keyExtractor={(item) => String(item.id)}
-          columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
-          contentContainerStyle={styles.productList}
-          renderItem={renderGridProduct}
-          ListEmptyComponent={
-            !loading ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No products found</Text>
-                <Text style={styles.emptyText}>
-                  Try another search term.
-                </Text>
+              <View style={styles.promoTextWrap}>
+                <Text style={styles.promoTitle}>Trusted Quality</Text>
+                <Text style={styles.promoText}>Carefully selected products</Text>
               </View>
-            ) : null
-          }
-        />
-      </View>
+            </View>
+          </View>
+
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Shop by Category</Text>
+              <Text style={styles.sectionSubtitle}>
+                Quick access to popular categories
+              </Text>
+            </View>
+
+            <Pressable onPress={() => router.push('/categories')}>
+              <Text style={styles.linkText}>See all</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesRow}
+          >
+            {quickCategories.map((category) => {
+              const active = selectedCategorySlug === category.slug;
+
+              return (
+                <Pressable
+                  key={category.id}
+                  onPress={() => toggleCategoryFilter(category)}
+                  style={[
+                    styles.categoryShortcutCard,
+                    { width: categoryCardWidth },
+                    active && styles.categoryShortcutCardActive,
+                  ]}
+                >
+                  <View style={styles.categoryShortcutImageWrap}>
+                    <Image
+                      source={{ uri: category.image_url || FALLBACK_CATEGORY }}
+                      style={styles.categoryShortcutImage}
+                    />
+                  </View>
+                  <Text numberOfLines={2} style={styles.categoryShortcutText}>
+                    {category.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {!hasActiveFilters ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <View>
+                  <Text style={styles.sectionTitle}>Featured Products</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Handpicked items you may love
+                  </Text>
+                </View>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalProductsRow}
+              >
+                {(featuredProducts.length
+                  ? featuredProducts
+                  : products.slice(0, 10)
+                ).map(renderHorizontalProductCard)}
+              </ScrollView>
+
+              <View style={styles.sectionHeaderRow}>
+                <View>
+                  <Text style={styles.sectionTitle}>New Arrivals</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Recently added products in store
+                  </Text>
+                </View>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalProductsRow}
+              >
+                {(newArrivals.length ? newArrivals : products.slice(0, 10)).map(
+                  renderHorizontalProductCard
+                )}
+              </ScrollView>
+            </>
+          ) : null}
+
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>
+                {hasActiveFilters ? 'Search Results' : 'All Products'}
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                Browse everything available in store
+              </Text>
+            </View>
+          </View>
+
+          {loading && !products.length ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : null}
+
+          {filteredProducts.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalProductsRow}
+            >
+              {filteredProducts.map(renderHorizontalProductCard)}
+            </ScrollView>
+          ) : !loading ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="search-outline" size={34} color={colors.muted} />
+              <Text style={styles.emptyTitle}>No products found</Text>
+              <Text style={styles.emptyText}>
+                Try another product name, category, or clear your filters.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -637,14 +913,73 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
-  input: {
+  searchBlock: {
+    gap: 10,
+  },
+
+  searchWrap: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingHorizontal: 14,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  searchInput: {
+    flex: 1,
     color: colors.text,
+    paddingVertical: 13,
+  },
+
+  filterRow: {
+    paddingRight: spacing.sm,
+    gap: 8,
+  },
+
+  filterChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+
+  filterChipText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  filterChipTextActive: {
+    color: '#fff',
+  },
+
+  searchSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  searchSummaryText: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
+  },
+
+  clearFiltersText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '700',
   },
 
   promoRow: {
@@ -724,11 +1059,16 @@ const styles = StyleSheet.create({
   categoryShortcutCard: {
     alignItems: 'center',
     gap: 8,
+    paddingVertical: 4,
+  },
+
+  categoryShortcutCardActive: {
+    transform: [{ scale: 1.03 }],
   },
 
   categoryShortcutImageWrap: {
-    width: 64,
-    height: 64,
+    width: 66,
+    height: 66,
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#fff',
@@ -798,6 +1138,12 @@ const styles = StyleSheet.create({
     minHeight: 34,
   },
 
+  horizontalCardSubtitle: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 2,
+  },
+
   horizontalCardPrice: {
     fontSize: 13,
     fontWeight: '800',
@@ -819,15 +1165,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '700',
-  },
-
-  productList: {
-    paddingBottom: spacing.xl,
-  },
-
-  row: {
-    justifyContent: 'space-between',
-    marginBottom: 12,
   },
 
   gridCard: {
@@ -860,6 +1197,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  featuredPill: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  featuredPillText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
   gridCardBody: {
     padding: 12,
     gap: 10,
@@ -869,6 +1222,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: colors.text,
+  },
+
+  gridCardSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 4,
   },
 
   gridCardMeta: {
@@ -887,10 +1246,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  inStockText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '700',
+  },
+
   outOfStockText: {
     fontSize: 12,
     color: '#C62828',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
   gridCardFooter: {
@@ -924,7 +1289,7 @@ const styles = StyleSheet.create({
   emptyState: {
     paddingVertical: spacing.xl,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
 
   emptyTitle: {
@@ -937,5 +1302,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
     textAlign: 'center',
+    lineHeight: 19,
+    maxWidth: 260,
   },
 });

@@ -20,9 +20,6 @@ export type AuthResponse = {
   tokens: Tokens;
 };
 
-/**
- * Generic API pagination types
- */
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -67,12 +64,35 @@ export type Product = {
   is_featured: boolean;
   base_price: string;
   is_in_stock: boolean;
-  category?: Category | null;
+  category: Category | null;
   variants: ProductVariant[];
-  average_rating?: string | number;
+  average_rating?: string;
   total_reviews?: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductPayloadVariant = {
+  id?: number;
+  name: string;
+  sku?: string;
+  price: string;
+  stock_quantity?: number;
+  max_quantity_per_order?: number | null;
+  is_active?: boolean;
+  sort_order?: number;
+};
+
+export type ProductPayload = {
+  title: string;
+  slug?: string;
+  description?: string;
+  hero_image?: string | null;
+  image_urls?: string[];
+  is_active?: boolean;
+  is_featured?: boolean;
+  category_id: number;
+  variants: ProductPayloadVariant[];
 };
 
 export type CartItem = {
@@ -228,8 +248,7 @@ export type CreateCustomerAddressPayload = {
   is_default?: boolean;
 };
 
-export type UpdateCustomerAddressPayload =
-  Partial<CreateCustomerAddressPayload>;
+export type UpdateCustomerAddressPayload = Partial<CreateCustomerAddressPayload>;
 
 export type CustomerAddressPayload =
   | CreateCustomerAddressPayload

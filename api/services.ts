@@ -160,10 +160,27 @@ export const authApi = {
   },
 };
 
+// Catalog API
 export const catalogApi = {
-  async products() {
+  async products(params?: {
+    search?: string;
+    category?: number | string;
+    is_featured?: boolean;
+    is_active?: boolean;
+    ordering?: string;
+  }) {
     try {
-      const { data } = await api.get<Product[] | { results: Product[] }>('/products/');
+      const { data } = await api.get<Product[] | { results: Product[] }>('/products/', {
+        params: {
+          ...(params?.search ? { search: params.search } : {}),
+          ...(params?.category !== undefined ? { category: params.category } : {}),
+          ...(params?.is_featured !== undefined
+            ? { is_featured: params.is_featured }
+            : {}),
+          ...(params?.is_active !== undefined ? { is_active: params.is_active } : {}),
+          ...(params?.ordering ? { ordering: params.ordering } : {}),
+        },
+      });
       return normalizeList(data);
     } catch (error: any) {
       console.log('GET /products/ error:', error?.response?.data || error.message);
@@ -181,9 +198,19 @@ export const catalogApi = {
     }
   },
 
-  async categories() {
+  async categories(params?: {
+    search?: string;
+    is_active?: boolean;
+    ordering?: string;
+  }) {
     try {
-      const { data } = await api.get<Category[] | { results: Category[] }>('/categories/');
+      const { data } = await api.get<Category[] | { results: Category[] }>('/categories/', {
+        params: {
+          ...(params?.search ? { search: params.search } : {}),
+          ...(params?.is_active !== undefined ? { is_active: params.is_active } : {}),
+          ...(params?.ordering ? { ordering: params.ordering } : {}),
+        },
+      });
       return normalizeList(data);
     } catch (error: any) {
       console.log('GET /categories/ error:', error?.response?.data || error.message);
@@ -192,6 +219,7 @@ export const catalogApi = {
   },
 };
 
+// Cart API
 export const cartApi = {
   async ensure() {
     try {

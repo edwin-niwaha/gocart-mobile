@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
   Image,
   Pressable,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -15,27 +18,81 @@ import { Screen } from '@/components/Screen';
 import { EmptyState } from '@/components/EmptyState';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
-import type { Product } from '@/types';
+import { useProtectedAction } from '@/hooks/useProtectedAction';
+import type { Product, ProductVariant } from '@/types';
 
 const FALLBACK_CATEGORY =
   'https://via.placeholder.com/300x300.png?text=Category';
 const FALLBACK_PRODUCT =
   'https://via.placeholder.com/400x300.png?text=Product';
 
+function dedupeVariants(variants: ProductVariant[] = []) {
+  const seenIds = new Set<number>();
+  const seenKeys = new Set<string>();
+
+  return variants.filter((variant) => {
+    if (typeof variant.id === 'number') {
+      if (seenIds.has(variant.id)) return false;
+      seenIds.add(variant.id);
+      return true;
+    }
+
+    const fallbackKey = `${variant.name}-${variant.sku ?? ''}-${variant.price}`;
+    if (seenKeys.has(fallbackKey)) return false;
+    seenKeys.add(fallbackKey);
+    return true;
+  });
+}
+
+function getInitialVariant(variants: ProductVariant[]) {
+  return (
+    variants.find((variant) => variant.is_active && variant.is_in_stock) ||
+    variants.find((variant) => variant.is_active) ||
+    variants[0] ||
+    null
+  );
+}
+
+function getActiveVariants(product: Product) {
+  const source = product.variants?.filter((variant) => variant.is_active) || [];
+  return dedupeVariants(source);
+}
+
+function getProductStockInfo(product: Product) {
+  const activeVariants = getActiveVariants(product);
+  const selectedVariant = getInitialVariant(activeVariants);
+  const isOutOfStock = selectedVariant
+    ? !selectedVariant.is_in_stock
+    : !product.is_in_stock;
+
+  return {
+    activeVariants,
+    selectedVariant,
+    isOutOfStock,
+    hasSingleVariant: activeVariants.length === 1,
+    hasMultipleVariants: activeVariants.length > 1,
+    stockLabel: isOutOfStock ? 'Out of stock' : 'In stock',
+  };
+}
+
 export default function CategoriesScreen() {
-  const { categories, products, loadCatalog, loading } = useShop();
+  const {
+    categories,
+    products,
+    wishlistItems,
+    loadCatalog,
+    loading,
+    toggleWishlist,
+    addToCart,
+  } = useShop();
+
+  const protectedAction = useProtectedAction();
   const { width } = useWindowDimensions();
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [showAllProducts, setShowAllProducts] = useState(false);
-
-  const isTablet = width >= 768;
-  const sidebarWidth = isTablet ? 120 : 95;
-  const layoutGap = 12;
-  const contentWidth = width - spacing.lg * 2 - sidebarWidth - layoutGap;
-  const numColumns = isTablet ? 3 : 2;
-  const cardGap = 10;
-  const cardWidth = (contentWidth - cardGap * (numColumns - 1)) / numColumns;
+  const [query, setQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [addingProductId, setAddingProductId] = useState<number | null>(null);
 
   useEffect(() => {
     loadCatalog().catch(() => undefined);
@@ -47,25 +104,57 @@ export default function CategoriesScreen() {
     }
   }, [categories, activeCategory]);
 
-  const selectedCategory = useMemo(
-    () =>
-      categories.find((category) => category.slug === activeCategory) || null,
-    [categories, activeCategory]
-  );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadCatalog();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredCategories = useMemo(() => {
+    if (!normalizedQuery) return categories;
+
+    return categories.filter((category) =>
+      `${category.name} ${category.slug}`.toLowerCase().includes(normalizedQuery)
+    );
+  }, [categories, normalizedQuery]);
+
+  const selectedCategory =
+    filteredCategories.find((c) => c.slug === activeCategory) ||
+    categories.find((c) => c.slug === activeCategory) ||
+    null;
 
   const categoryProducts = useMemo(() => {
     if (!activeCategory) return [];
-    return products.filter(
-      (product) => product.category?.slug === activeCategory
-    );
-  }, [products, activeCategory]);
 
-  const previewProducts = useMemo(
-    () => categoryProducts.slice(0, isTablet ? 6 : 4),
-    [categoryProducts, isTablet]
-  );
+    return products.filter((product) => {
+      if (product.category?.slug !== activeCategory) return false;
 
-  const displayedProducts = showAllProducts ? categoryProducts : previewProducts;
+      if (!normalizedQuery) return true;
+
+      const text = [
+        product.title,
+        product.slug,
+        product.description,
+        product.category?.name,
+        ...(product.variants || []).map(
+          (variant) => `${variant.name || ''} ${variant.sku || ''}`
+        ),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return text.includes(normalizedQuery);
+    });
+  }, [products, activeCategory, normalizedQuery]);
+
+  const getCategoryCount = (slug: string) =>
+    products.filter((p) => p.category?.slug === slug).length;
 
   const getProductImage = (product: Product) =>
     product.hero_image || product.image_urls?.[0] || FALLBACK_PRODUCT;
@@ -73,453 +162,564 @@ export default function CategoriesScreen() {
   const formatPrice = (price: string | number) =>
     `UGX ${Number(price || 0).toLocaleString()}`;
 
-  const handleCategorySelect = (slug: string) => {
-    setActiveCategory(slug);
-    setShowAllProducts(false);
+  const getProductSubtitle = (product: Product) => {
+    const categoryName = product.category?.name || '';
+    const { activeVariants } = getProductStockInfo(product);
+
+    if (!activeVariants.length) return categoryName || 'Unavailable';
+    if (activeVariants.length === 1) return categoryName || 'Available';
+
+    return categoryName
+      ? `${categoryName} • ${activeVariants.length} options`
+      : `${activeVariants.length} options`;
   };
 
-  const renderProduct = ({ item }: { item: Product }) => {
+  const handleAddToCart = async (product: Product) => {
+    const { activeVariants, selectedVariant, isOutOfStock } =
+      getProductStockInfo(product);
+
+    if (!activeVariants.length) {
+      Alert.alert('Unavailable', 'This product has no purchasable option yet.');
+      return;
+    }
+
+    if (activeVariants.length > 1) {
+      router.push(`/product/${product.slug}`);
+      return;
+    }
+
+    if (isOutOfStock || !selectedVariant) {
+      Alert.alert('Out of stock', 'This product is currently unavailable.');
+      return;
+    }
+
+    try {
+      setAddingProductId(product.id);
+      await addToCart(selectedVariant.id, 1);
+    } finally {
+      setAddingProductId(null);
+    }
+  };
+
+  const sidebarWidth = 96;
+  const contentWidth = width - sidebarWidth - 36;
+  const productCardWidth = Math.min(Math.max(contentWidth * 0.58, 150), 190);
+
+  if (!loading && !categories.length) {
     return (
-      <Pressable
-        onPress={() => router.push(`/product/${item.slug}`)}
-        style={[styles.productCard, { width: cardWidth }]}
-      >
-        <Image
-          source={{ uri: getProductImage(item) }}
-          style={styles.productImage}
+      <Screen>
+        <EmptyState
+          title="No categories yet"
+          subtitle="Create categories in Django and they will appear here."
         />
-
-        <View style={styles.productBody}>
-          <Text numberOfLines={2} style={styles.productTitle}>
-            {item.title}
-          </Text>
-
-          <Text style={styles.productPrice}>{formatPrice(item.base_price)}</Text>
-        </View>
-      </Pressable>
+      </Screen>
     );
-  };
+  }
 
   return (
-    <Screen scroll>
-      <View style={styles.container}>
-        {!loading && !categories.length ? (
-          <EmptyState
-            title="No categories yet"
-            subtitle="Create categories in Django and they will appear here."
-          />
-        ) : (
-          <>
-            <View style={styles.topRow}>
-              <Text style={styles.pageTitle}>Categories</Text>
-              <Text style={styles.resultText}>
-                {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}
-              </Text>
-            </View>
+    <Screen>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.container}>
+          <View style={styles.searchBox}>
+            <Ionicons name="search-outline" size={18} color={colors.muted} />
 
-            {loading && !categories.length ? (
-              <ActivityIndicator size="large" color={colors.primary} />
-            ) : (
-              <View style={styles.layout}>
-                <View style={[styles.sidebar, { width: sidebarWidth }]}>
-                  {categories.map((category) => {
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search categories or products..."
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+            />
+
+            {!!query && (
+              <Pressable onPress={() => setQuery('')}>
+                <Ionicons name="close-circle" size={18} color={colors.muted} />
+              </Pressable>
+            )}
+          </View>
+
+          {loading && !categories.length ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <View style={styles.layout}>
+              <View style={styles.sidebar}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {filteredCategories.map((category) => {
                     const active = category.slug === activeCategory;
 
                     return (
                       <Pressable
                         key={category.id}
-                        onPress={() => handleCategorySelect(category.slug)}
+                        onPress={() => setActiveCategory(category.slug)}
                         style={[
                           styles.categoryItem,
                           active && styles.categoryItemActive,
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.categoryThumbWrap,
-                            active && styles.categoryThumbWrapActive,
-                          ]}
-                        >
-                          <Image
-                            source={{
-                              uri: category.image_url || FALLBACK_CATEGORY,
-                            }}
-                            style={styles.categoryThumb}
-                          />
-                        </View>
+                        <Image
+                          source={{ uri: category.image_url || FALLBACK_CATEGORY }}
+                          style={styles.categoryImage}
+                        />
 
                         <Text
                           numberOfLines={2}
                           style={[
-                            styles.categoryLabel,
-                            active && styles.categoryLabelActive,
+                            styles.categoryName,
+                            active && styles.categoryNameActive,
                           ]}
                         >
                           {category.name}
                         </Text>
 
-                        {active ? <View style={styles.activeBar} /> : null}
+                        <Text style={styles.categoryMeta}>
+                          {getCategoryCount(category.slug)}
+                        </Text>
                       </Pressable>
                     );
                   })}
-                </View>
-
-                <View style={styles.content}>
-                  {selectedCategory ? (
-                    <>
-                      <View style={styles.categoryHero}>
-                        <Image
-                          source={{
-                            uri: selectedCategory.image_url || FALLBACK_CATEGORY,
-                          }}
-                          style={styles.categoryHeroImage}
-                        />
-                        <View style={styles.categoryHeroOverlay} />
-
-                        <View style={styles.categoryHeroContent}>
-                          <View style={styles.heroBadge}>
-                            <Ionicons
-                              name="grid-outline"
-                              size={12}
-                              color="#fff"
-                            />
-                            <Text style={styles.heroBadgeText}>Category</Text>
-                          </View>
-
-                          <Text style={styles.categoryHeroTitle}>
-                            {selectedCategory.name}
-                          </Text>
-
-                          <Text style={styles.categoryHeroSubtitle}>
-                            {showAllProducts
-                              ? 'All products in this category'
-                              : 'Browse products in this category'}
-                          </Text>
-
-                          <Pressable
-                            onPress={() => setShowAllProducts((prev) => !prev)}
-                            style={styles.exploreButton}
-                          >
-                            <Text style={styles.exploreButtonText}>
-                              {showAllProducts ? 'Show less' : 'View all'}
-                            </Text>
-                            <Ionicons
-                              name={
-                                showAllProducts
-                                  ? 'chevron-up-outline'
-                                  : 'arrow-forward'
-                              }
-                              size={14}
-                              color="#fff"
-                            />
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>
-                          {showAllProducts ? 'All Products' : 'Featured Products'}
-                        </Text>
-                        <Text style={styles.sectionSubtitle}>
-                          {displayedProducts.length} item
-                          {displayedProducts.length === 1 ? '' : 's'}
-                          {!showAllProducts && categoryProducts.length > displayedProducts.length
-                            ? ` of ${categoryProducts.length}`
-                            : ''}
-                        </Text>
-                      </View>
-
-                      <FlatList
-                        data={displayedProducts}
-                        key={numColumns}
-                        numColumns={numColumns}
-                        scrollEnabled={false}
-                        keyExtractor={(item) => String(item.id)}
-                        columnWrapperStyle={
-                          numColumns > 1 ? styles.row : undefined
-                        }
-                        contentContainerStyle={styles.productList}
-                        renderItem={renderProduct}
-                        ListEmptyComponent={
-                          <View style={styles.emptyProducts}>
-                            <Text style={styles.emptyProductsTitle}>
-                              No products in this category
-                            </Text>
-                            <Text style={styles.emptyProductsText}>
-                              Add products in Django and they will appear here.
-                            </Text>
-                          </View>
-                        }
-                      />
-                    </>
-                  ) : (
-                    <EmptyState
-                      title="No category selected"
-                      subtitle="Choose a category from the left."
-                    />
-                  )}
-                </View>
+                </ScrollView>
               </View>
-            )}
-          </>
-        )}
-      </View>
+
+              <View style={styles.content}>
+                {selectedCategory ? (
+                  <>
+                    <View style={styles.hero}>
+                      <Image
+                        source={{ uri: selectedCategory.image_url || FALLBACK_CATEGORY }}
+                        style={styles.heroImage}
+                      />
+                      <View style={styles.heroOverlay} />
+
+                      <View style={styles.heroContent}>
+                        <Text style={styles.heroTitle}>{selectedCategory.name}</Text>
+                        <Text style={styles.heroSubtext}>
+                          {categoryProducts.length} products
+                        </Text>
+                      </View>
+                    </View>
+
+                    {categoryProducts.length ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.productsRow}
+                      >
+                        {categoryProducts.map((product) => {
+                          const wished = wishlistItems.some(
+                            (wishlistItem) => wishlistItem.product.id === product.id
+                          );
+
+                          const {
+                            activeVariants,
+                            isOutOfStock,
+                            hasSingleVariant,
+                            hasMultipleVariants,
+                            stockLabel,
+                          } = getProductStockInfo(product);
+
+                          const isAdding = addingProductId === product.id;
+
+                          return (
+                            <Pressable
+                              key={product.id}
+                              onPress={() => router.push(`/product/${product.slug}`)}
+                              style={[styles.card, { width: productCardWidth }]}
+                            >
+                              <View style={styles.imageWrapper}>
+                                <Image
+                                  source={{ uri: getProductImage(product) }}
+                                  style={styles.cardImage}
+                                />
+
+                                <Pressable
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    protectedAction(async () => {
+                                      await toggleWishlist(product.id);
+                                    });
+                                  }}
+                                  style={styles.wishlistBtn}
+                                >
+                                  <Ionicons
+                                    name={wished ? 'heart' : 'heart-outline'}
+                                    size={18}
+                                    color={colors.primary}
+                                  />
+                                </Pressable>
+                              </View>
+
+                              <View style={styles.cardBody}>
+                                <Pressable
+                                  onPress={() => router.push(`/product/${product.slug}`)}
+                                >
+                                  <Text numberOfLines={2} style={styles.cardTitle}>
+                                    {product.title}
+                                  </Text>
+
+                                  <Text numberOfLines={1} style={styles.cardSubtitle}>
+                                    {getProductSubtitle(product)}
+                                  </Text>
+                                </Pressable>
+
+                                <View style={styles.cardMeta}>
+                                  <Text style={styles.cardPrice}>
+                                    {formatPrice(product.base_price)}
+                                  </Text>
+
+                                  <View
+                                    style={[
+                                      styles.stockBadgeBottom,
+                                      isOutOfStock
+                                        ? styles.stockBadgeOut
+                                        : styles.stockBadgeIn,
+                                    ]}
+                                  >
+                                    <Ionicons
+                                      name={
+                                        isOutOfStock
+                                          ? 'close-circle'
+                                          : 'checkmark-circle'
+                                      }
+                                      size={12}
+                                      color={
+                                        isOutOfStock ? '#dc2626' : colors.success
+                                      }
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.stockBadgeText,
+                                        isOutOfStock
+                                          ? styles.stockBadgeTextOut
+                                          : styles.stockBadgeTextIn,
+                                      ]}
+                                    >
+                                      {stockLabel}
+                                    </Text>
+                                  </View>
+
+                                  {hasMultipleVariants && !isOutOfStock && (
+                                    <Text style={styles.variantHint}>
+                                      Choose from {activeVariants.length} variants
+                                    </Text>
+                                  )}
+                                </View>
+
+                                <Pressable
+                                  style={[
+                                    styles.cartButton,
+                                    (isOutOfStock || isAdding) &&
+                                      styles.cartBtnDisabled,
+                                  ]}
+                                  disabled={isOutOfStock || isAdding}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    protectedAction(async () => {
+                                      await handleAddToCart(product);
+                                    });
+                                  }}
+                                >
+                                  {isAdding ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                  ) : (
+                                    <>
+                                      <Ionicons
+                                        name={
+                                          isOutOfStock
+                                            ? 'close-circle-outline'
+                                            : hasSingleVariant
+                                              ? 'cart-outline'
+                                              : 'options-outline'
+                                        }
+                                        size={16}
+                                        color="#fff"
+                                      />
+                                      <Text style={styles.cartButtonText}>
+                                        {isOutOfStock
+                                          ? 'Out of stock'
+                                          : hasSingleVariant
+                                            ? 'Add to Cart'
+                                            : 'Select'}
+                                      </Text>
+                                    </>
+                                  )}
+                                </Pressable>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : (
+                      <EmptyState
+                        title="No products found"
+                        subtitle="Try another category or search term."
+                      />
+                    )}
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No category selected"
+                    subtitle="Choose a category from the left."
+                  />
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.md,
     paddingBottom: spacing.xl,
+    gap: spacing.md,
   },
 
-  topRow: {
+  searchBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
-  },
-
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-  },
-
-  resultText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
-    backgroundColor: colors.surface,
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    backgroundColor: colors.surface,
+  },
+
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    paddingVertical: 10,
   },
 
   layout: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 10,
   },
 
   sidebar: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    width: 96,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: '#fff',
     overflow: 'hidden',
+    alignSelf: 'flex-start',
   },
 
   categoryItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
-    position: 'relative',
-    backgroundColor: '#fff',
   },
 
   categoryItemActive: {
-    backgroundColor: '#FFF7ED',
-  },
-
-  categoryThumbWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-
-  categoryThumbWrapActive: {
-    borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
   },
 
-  categoryThumb: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  categoryImage: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 6,
   },
 
-  categoryLabel: {
+  categoryName: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.text,
     textAlign: 'center',
-    lineHeight: 14,
   },
 
-  categoryLabelActive: {
+  categoryNameActive: {
     color: colors.primary,
   },
 
-  activeBar: {
-    position: 'absolute',
-    right: 0,
-    top: 10,
-    bottom: 10,
-    width: 3,
-    borderTopLeftRadius: 999,
-    borderBottomLeftRadius: 999,
-    backgroundColor: colors.primary,
+  categoryMeta: {
+    fontSize: 10,
+    color: colors.muted,
+    marginTop: 2,
+    textAlign: 'center',
   },
 
   content: {
     flex: 1,
-    gap: 12,
+    gap: 10,
+    alignSelf: 'flex-start',
   },
 
-  categoryHero: {
-    height: 180,
-    borderRadius: 20,
+  hero: {
+    height: 110,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: colors.primarySoft,
     justifyContent: 'flex-end',
   },
 
-  categoryHeroImage: {
+  heroImage: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
   },
 
-  categoryHeroOverlay: {
+  heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.28)',
   },
 
-  categoryHeroContent: {
-    padding: 14,
-    gap: 8,
+  heroContent: {
+    padding: 12,
   },
 
-  heroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  heroBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
-  categoryHeroTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-
-  categoryHeroSubtitle: {
-    color: 'rgba(255,255,255,0.92)',
-    fontSize: 13,
-  },
-
-  exploreButton: {
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-
-  exploreButtonText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-
-  sectionHeader: {
-    gap: 2,
-  },
-
-  sectionTitle: {
+  heroTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.text,
+    color: '#fff',
   },
 
-  sectionSubtitle: {
-    fontSize: 12,
-    color: colors.muted,
+  heroSubtext: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 2,
   },
 
-  productList: {
-    paddingBottom: spacing.xl,
+  productsRow: {
+    paddingRight: 12,
+    alignItems: 'flex-start',
+    gap: 10,
   },
 
-  row: {
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-
-  productCard: {
+  card: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#ECECEC',
-    marginBottom: 10,
+    alignSelf: 'flex-start',
   },
 
-  productImage: {
+  imageWrapper: {
+    position: 'relative',
+  },
+
+  cardImage: {
     width: '100%',
-    height: 120,
-    resizeMode: 'cover',
+    height: 88,
   },
 
-  productBody: {
-    padding: 10,
+  wishlistBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
+  cardBody: {
+    padding: 8,
+    gap: 8,
+  },
+
+  cardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    minHeight: 30,
+  },
+
+  cardSubtitle: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 2,
+  },
+
+  cardMeta: {
     gap: 6,
   },
 
-  productTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-    minHeight: 34,
-  },
-
-  productPrice: {
-    fontSize: 13,
+  cardPrice: {
+    fontSize: 12,
     fontWeight: '800',
     color: colors.primary,
   },
 
-  emptyProducts: {
-    paddingVertical: spacing.xl,
+  stockBadgeBottom: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
 
-  emptyProductsTitle: {
-    fontSize: 16,
+  stockBadgeIn: {
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+  },
+
+  stockBadgeOut: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+
+  stockBadgeText: {
+    fontSize: 10,
     fontWeight: '800',
-    color: colors.text,
   },
 
-  emptyProductsText: {
-    fontSize: 13,
+  stockBadgeTextIn: {
+    color: colors.success,
+  },
+
+  stockBadgeTextOut: {
+    color: '#dc2626',
+  },
+
+  variantHint: {
+    fontSize: 11,
     color: colors.muted,
-    textAlign: 'center',
+    fontWeight: '600',
+  },
+
+  cartButton: {
+    marginTop: 8,
+    minHeight: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: colors.primary,
+  },
+
+  cartBtnDisabled: {
+    opacity: 0.6,
+  },
+
+  cartButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
