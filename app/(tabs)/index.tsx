@@ -567,7 +567,7 @@ export default function HomeScreen() {
   const hasActiveFilters = Boolean(query.trim() || selectedCategorySlug);
 
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={

@@ -471,7 +471,7 @@ export default function CheckoutScreen() {
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Please log in before placing an order.">
         <View style={styles.container}>
           {cartItems.length ? (

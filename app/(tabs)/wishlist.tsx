@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { AuthGate } from '@/components/AuthGate';
@@ -12,6 +12,7 @@ import { useProtectedAction } from '@/hooks/useProtectedAction';
 export default function WishlistScreen() {
   const { wishlistItems, loadAuthedData, addToCart, toggleWishlist } = useShop();
   const protectedAction = useProtectedAction();
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
@@ -36,18 +37,38 @@ export default function WishlistScreen() {
     router.push(`/product/${product.slug}`);
   };
 
+  const filteredWishlistItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return wishlistItems;
+
+    return wishlistItems.filter((item) => {
+      const product = item.product;
+      const name = product?.name?.toLowerCase?.() || '';
+      const slug = product?.slug?.toLowerCase?.() || '';
+      const description = product?.description?.toLowerCase?.() || '';
+
+      return (
+        name.includes(query) ||
+        slug.includes(query) ||
+        description.includes(query)
+      );
+    });
+  }, [wishlistItems, search]);
+
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Log in to save products and sync them across devices.">
         <View style={styles.container}>
-          {wishlistItems.length ? (
-            <View style={styles.topRow}>
-              <Text style={styles.countPill}>
-                {wishlistItems.length} saved item
-                {wishlistItems.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-          ) : null}
+          <View style={styles.searchWrap}>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search wishlist..."
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+            />
+          </View>
 
           {!wishlistItems.length ? (
             <View style={styles.emptyWrap}>
@@ -56,9 +77,16 @@ export default function WishlistScreen() {
                 subtitle="Save products here for later."
               />
             </View>
+          ) : !filteredWishlistItems.length ? (
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                title="No matching products"
+                subtitle="Try a different search term."
+              />
+            </View>
           ) : (
             <View style={styles.list}>
-              {wishlistItems.map((item) => (
+              {filteredWishlistItems.map((item) => (
                 <View key={item.id} style={styles.cardWrap}>
                   <ProductCard
                     product={item.product}
@@ -88,6 +116,21 @@ const styles = StyleSheet.create({
   container: {
     paddingBottom: spacing.xl,
     gap: spacing.md,
+  },
+
+  searchWrap: {
+    marginBottom: spacing.xs,
+  },
+
+  searchInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: colors.text,
   },
 
   topRow: {

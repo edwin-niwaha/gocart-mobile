@@ -153,6 +153,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen scroll contentContainerStyle={styles.page}>
+      
       <View style={styles.hero}>
         <View style={styles.heroBg} />
 

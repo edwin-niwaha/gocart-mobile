@@ -54,6 +54,7 @@ export type ProductVariant = {
 };
 
 export type Product = {
+  name: any;
   id: number;
   title: string;
   slug: string;

@@ -32,7 +32,7 @@ export default function CartScreen() {
   }, [cartItems]);
 
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Log in to view your cart and place orders.">
         {!cartItems.length ? (
           <EmptyState

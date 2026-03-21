@@ -4,11 +4,58 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { colors } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 
+function HeaderCartButton({ count }: { count: number }) {
+  return (
+    <Pressable onPress={() => router.push('/cart')} style={styles.headerCartBtn}>
+      <Ionicons name="cart-outline" size={22} color={colors.text} />
+      {count > 0 ? (
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>
+            {count > 99 ? '99+' : count}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function HeaderTitle({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <View style={styles.brandWrap}>
+      <View style={styles.logoBadge}>
+        <Ionicons name={icon} size={16} color="#fff" />
+      </View>
+
+      <View>
+        <Text style={styles.brandTitle}>{title}</Text>
+        <Text style={styles.brandSlogan}>{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function TabLayout() {
-  const { cartItems } = useShop();
+  const { cartItems = [], 
+    orders = [], 
+    totalOrders = 0,
+    wishlistItems = [],
+  } = useShop();
 
-  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const cartCount = cartItems.reduce(
+    (sum, item) => sum + Number(item.quantity || 0),
+    0
+  );
 
+  const visibleOrdersCount = orders.length;
+  const wishlistCount = wishlistItems.length;
   return (
     <Tabs
       screenOptions={{
@@ -28,34 +75,13 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="bag-handle" size={16} color="#fff" />
-              </View>
-
-              <View>
-                <Text style={styles.brandTitle}>GoCart</Text>
-                <Text style={styles.brandSlogan}>
-                  Everything you need, delivered
-                </Text>
-              </View>
-            </View>
+            <HeaderTitle
+              icon="bag-handle"
+              title="GoCart"
+              subtitle="Everything you need, delivered"
+            />
           ),
-          headerRight: () => (
-            <Pressable
-              onPress={() => router.push('/cart')}
-              style={styles.headerCartBtn}
-            >
-              <Ionicons name="cart-outline" size={22} color={colors.text} />
-              {cartCount > 0 ? (
-                <View style={styles.headerBadge}>
-                  <Text style={styles.headerBadgeText}>
-                    {cartCount > 99 ? '99+' : cartCount}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          ),
+          headerRight: () => <HeaderCartButton count={cartCount} />,
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="home" color={color} size={size} />
           ),
@@ -67,17 +93,13 @@ export default function TabLayout() {
         options={{
           title: 'Categories',
           headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="grid" size={16} color="#fff" />
-              </View>
-
-              <View>
-                <Text style={styles.brandTitle}>Categories</Text>
-                <Text style={styles.brandSlogan}>Browse by collection</Text>
-              </View>
-            </View>
+            <HeaderTitle
+              icon="grid"
+              title="Categories"
+              subtitle="Browse by collection"
+            />
           ),
+          headerRight: () => <HeaderCartButton count={cartCount} />,
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="th-large" color={color} size={size} />
           ),
@@ -88,30 +110,30 @@ export default function TabLayout() {
         name="cart"
         options={{
           title: 'Cart',
-          headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="cart" size={16} color="#fff" />
-              </View>
 
-              <View>
-                <Text style={styles.brandTitle}>My Cart</Text>
-                <Text style={styles.brandSlogan}>
-                  Ready for checkout
-                </Text>
-              </View>
-            </View>
+          headerTitle: () => (
+            <HeaderTitle
+              icon="cart"
+              title="My Cart"
+              subtitle={`${
+                cartCount === 0
+                  ? 'Your cart is empty'
+                  : `${cartCount} item${cartCount === 1 ? '' : 's'}`
+              }`}
+            />
           ),
+
           tabBarIcon: ({ color, size }) => (
             <View style={styles.iconWrapper}>
               <FontAwesome name="shopping-cart" color={color} size={size} />
-              {cartCount > 0 && (
+
+              {cartCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
                     {cartCount > 99 ? '99+' : cartCount}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
           ),
         }}
@@ -122,17 +144,15 @@ export default function TabLayout() {
         options={{
           title: 'Orders',
           headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="receipt" size={16} color="#fff" />
-              </View>
-
-              <View>
-                <Text style={styles.brandTitle}>My Orders</Text>
-                <Text style={styles.brandSlogan}>Track your purchases</Text>
-              </View>
-            </View>
+            <HeaderTitle
+              icon="receipt"
+              title="My Orders"
+              subtitle={`${visibleOrdersCount} of ${totalOrders} order${
+                totalOrders === 1 ? '' : 's'
+              }`}
+            />
           ),
+          headerRight: () => <HeaderCartButton count={cartCount} />,
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="shopping-bag" color={color} size={size} />
           ),
@@ -143,22 +163,35 @@ export default function TabLayout() {
         name="wishlist"
         options={{
           title: 'Wishlist',
-          headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="heart" size={16} color="#fff" />
-              </View>
 
-              <View>
-                <Text style={styles.brandTitle}>Wishlist</Text>
-                <Text style={styles.brandSlogan}>
-                  Saved for later
-                </Text>
-              </View>
-            </View>
+          headerTitle: () => (
+            <HeaderTitle
+              icon="heart"
+              title="My Wishlist"
+              subtitle={`${
+                wishlistCount === 0
+                  ? 'No saved items'
+                  : `${wishlistCount} saved item${
+                      wishlistCount === 1 ? '' : 's'
+                    }`
+              }`}
+            />
           ),
+
+          headerRight: () => <HeaderCartButton count={cartCount} />,
+
           tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="heart" color={color} size={size} />
+            <View style={styles.iconWrapper}>
+              <FontAwesome name="heart" color={color} size={size} />
+
+              {wishlistCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {wishlistCount > 99 ? '99+' : wishlistCount}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           ),
         }}
       />
@@ -168,25 +201,18 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           headerTitle: () => (
-            <View style={styles.brandWrap}>
-              <View style={styles.logoBadge}>
-                <Ionicons name="person" size={16} color="#fff" />
-              </View>
-
-              <View>
-                <Text style={styles.brandTitle}>My Profile</Text>
-                <Text style={styles.brandSlogan}>
-                  Account & preferences
-                </Text>
-              </View>
-            </View>
+            <HeaderTitle
+              icon="person"
+              title="My Profile"
+              subtitle="Account & preferences"
+            />
           ),
+          headerRight: () => <HeaderCartButton count={cartCount} />,
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="user" color={color} size={size} />
           ),
         }}
       />
-
     </Tabs>
   );
 }

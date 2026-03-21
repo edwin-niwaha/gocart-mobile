@@ -40,7 +40,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Create account</Text>
 

@@ -386,7 +386,7 @@ export default function AddressesScreen() {
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Log in to manage your addresses.">
         <View style={styles.container}>
           <Pressable onPress={openAdd} style={styles.addBtn}>
