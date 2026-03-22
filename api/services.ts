@@ -574,3 +574,80 @@ export const addressApi = {
     }
   },
 };
+
+// paymentApi
+export type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
+
+export type PaymentStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED';
+
+export interface CreatePaymentPayload {
+  order: number;
+  provider: PaymentProvider;
+  amount: number;
+  currency?: string;
+}
+
+export interface InitiateMTNPayload {
+  address_id: number;
+  phone_number: string;
+}
+
+export interface InitiateMTNResponse {
+  reference: string;
+  external_id: string;
+  status: PaymentStatus;
+  amount: string | number;
+  currency: string;
+}
+
+export interface PaymentStatusResponse {
+  reference: string;
+  provider: PaymentProvider;
+  status: PaymentStatus;
+  amount: string | number;
+  currency: string;
+  phone_number: string;
+  external_id: string;
+  transaction_id: string;
+  provider_response: Record<string, any>;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinalizeOrderResponse {
+  order: {
+    id: number;
+    slug: string;
+    [key: string]: any;
+  };
+  payment_reference: string;
+}
+
+export const paymentApi = {
+  async create(payload: CreatePaymentPayload) {
+    const { data } = await api.post('/payments/', payload);
+    return data;
+  },
+
+  async initiateMTN(payload: InitiateMTNPayload): Promise<InitiateMTNResponse> {
+    const { data } = await api.post('/payments/mtn/initiate/', payload);
+    return data;
+  },
+
+  async checkStatus(reference: string): Promise<PaymentStatusResponse> {
+    const { data } = await api.get(`/payments/${reference}/status/`);
+    return data;
+  },
+
+  async finalizeOrder(reference: string): Promise<FinalizeOrderResponse> {
+    const { data } = await api.post(`/payments/${reference}/finalize-order/`);
+    return data;
+  },
+};

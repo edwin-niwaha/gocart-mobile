@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { router } from 'expo-router';
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -23,6 +24,36 @@ import type {
   CustomerAddressRegion,
 } from '@/types';
 import { money } from '@/utils/format';
+import { paymentApi } from '@/api/services';
+
+type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
+
+const PAYMENT_OPTIONS: ReadonlyArray<{
+  label: string;
+  subtitle: string;
+  value: PaymentProvider;
+}> = [
+  {
+    label: 'Pay on Delivery',
+    subtitle: 'Cash or Mobile Money on arrival',
+    value: 'CASH',
+  },
+  {
+    label: 'MTN Mobile Money',
+    subtitle: 'Pay instantly with MTN MoMo',
+    value: 'MTN',
+  },
+  {
+    label: 'Airtel Money',
+    subtitle: 'Coming soon',
+    value: 'AIRTEL',
+  },
+];
+
+const PAYMENT_ICONS = {
+  MTN: require('@/assets/images/momo/mtn.png'),
+  AIRTEL: require('@/assets/images/momo/airtel.png'),
+} as const;
 
 const REGION_OPTIONS: ReadonlyArray<{
   label: string;
@@ -87,6 +118,23 @@ const showInfo = (message: string) => {
   });
 };
 
+const delay = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const normalizeUgPhone = (value: string) => {
+  const raw = value.trim().replace(/[^\d+]/g, '');
+
+  if (!raw) return '';
+
+  if (raw.startsWith('+256')) return raw;
+  if (raw.startsWith('256')) return `+${raw}`;
+  if (raw.startsWith('0')) return `+256${raw.slice(1)}`;
+
+  return raw;
+};
+
+const isValidUgPhone = (value: string) => /^\+2567\d{8}$/.test(value);
+
 function AddressFormModal({
   visible,
   loading,
@@ -114,40 +162,36 @@ function AddressFormModal({
   };
 
   const submit = () => {
-    const streetName = form.street_name.trim();
-    const city = form.city.trim();
-    const phoneNumber = form.phone_number.trim();
-    const additionalTelephone = form.additional_telephone.trim();
-    const additionalInformation = form.additional_information.trim();
+    const payload: CustomerAddressPayload = {
+      street_name: form.street_name.trim(),
+      city: form.city.trim(),
+      phone_number: form.phone_number.trim(),
+      additional_telephone: form.additional_telephone.trim(),
+      additional_information: form.additional_information.trim(),
+      region: form.region,
+      is_default: form.is_default,
+    };
 
-    if (!streetName) {
+    if (!payload.street_name) {
       showInfo('Street name / building / apartment is required.');
       return;
     }
 
-    if (!city) {
+    if (!payload.city) {
       showInfo('City is required.');
       return;
     }
 
     if (
-      phoneNumber &&
-      additionalTelephone &&
-      phoneNumber === additionalTelephone
+      payload.phone_number &&
+      payload.additional_telephone &&
+      payload.phone_number === payload.additional_telephone
     ) {
       showError('Additional telephone must be different from phone number.');
       return;
     }
 
-    onSubmit({
-      street_name: streetName,
-      city,
-      phone_number: phoneNumber,
-      additional_telephone: additionalTelephone,
-      additional_information: additionalInformation,
-      region: form.region,
-      is_default: form.is_default,
-    });
+    onSubmit(payload);
   };
 
   return (
@@ -181,8 +225,8 @@ function AddressFormModal({
               placeholderTextColor={colors.muted}
               value={form.phone_number}
               onChangeText={(v) => setField('phone_number', v)}
-              style={styles.input}
               keyboardType="phone-pad"
+              style={styles.input}
             />
 
             <TextInput
@@ -190,8 +234,8 @@ function AddressFormModal({
               placeholderTextColor={colors.muted}
               value={form.additional_telephone}
               onChangeText={(v) => setField('additional_telephone', v)}
-              style={styles.input}
               keyboardType="phone-pad"
+              style={styles.input}
             />
 
             <TextInput
@@ -247,6 +291,7 @@ function AddressFormModal({
             <Pressable
               onPress={onClose}
               style={[styles.actionBtn, styles.cancelBtn]}
+              disabled={loading}
             >
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </Pressable>
@@ -274,11 +319,15 @@ function AddressFormModal({
 function AddressOption({
   item,
   selected,
+  expanded,
   onSelect,
+  onToggleExpand,
 }: {
   item: CustomerAddress;
   selected: boolean;
+  expanded: boolean;
   onSelect: () => void;
+  onToggleExpand: () => void;
 }) {
   const regionLabel =
     REGION_OPTIONS.find((option) => option.value === item.region)?.label ??
@@ -287,10 +336,7 @@ function AddressOption({
   return (
     <Pressable
       onPress={onSelect}
-      style={[
-        styles.addressCard,
-        selected && styles.addressCardSelected,
-      ]}
+      style={[styles.addressCard, selected && styles.addressCardSelected]}
     >
       <View style={styles.addressHeader}>
         <Text style={styles.addressTitle}>{item.city}</Text>
@@ -307,23 +353,35 @@ function AddressOption({
               <Text style={styles.selectedBadgeText}>Selected</Text>
             </View>
           ) : null}
+
+          <Pressable
+            onPress={onToggleExpand}
+            style={styles.expandBtn}
+            hitSlop={8}
+          >
+            <Text style={styles.expandBtnText}>{expanded ? '-' : '+'}</Text>
+          </Pressable>
         </View>
       </View>
 
-      <Text style={styles.cardText}>{item.street_name}</Text>
-      <Text style={styles.cardText}>{regionLabel}</Text>
+      {expanded ? (
+        <View style={styles.addressDetails}>
+          <Text style={styles.cardText}>{item.street_name}</Text>
+          <Text style={styles.cardText}>{regionLabel}</Text>
 
-      {!!item.phone_number && (
-        <Text style={styles.cardText}>Phone: {item.phone_number}</Text>
-      )}
+          {!!item.phone_number && (
+            <Text style={styles.cardText}>Phone: {item.phone_number}</Text>
+          )}
 
-      {!!item.additional_telephone && (
-        <Text style={styles.cardText}>Alt: {item.additional_telephone}</Text>
-      )}
+          {!!item.additional_telephone && (
+            <Text style={styles.cardText}>Alt: {item.additional_telephone}</Text>
+          )}
 
-      {!!item.additional_information && (
-        <Text style={styles.cardText}>{item.additional_information}</Text>
-      )}
+          {!!item.additional_information && (
+            <Text style={styles.cardText}>{item.additional_information}</Text>
+          )}
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -342,6 +400,10 @@ export default function CheckoutScreen() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressModalVisible, setAddressModalVisible] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [expandedAddressId, setExpandedAddressId] = useState<number | null>(null);
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider>('CASH');
+  const [mtnPhone, setMtnPhone] = useState('');
+  const [pollingPayment, setPollingPayment] = useState(false);
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
@@ -350,39 +412,53 @@ export default function CheckoutScreen() {
   useEffect(() => {
     if (!addresses.length) {
       setSelectedAddressId(null);
+      setExpandedAddressId(null);
       return;
     }
 
-    const stillExists = addresses.some((item) => item.id === selectedAddressId);
-    if (stillExists) return;
+    const selectedExists = addresses.some((item) => item.id === selectedAddressId);
+    if (!selectedExists) {
+      const defaultAddress = addresses.find((item) => item.is_default);
+      const fallbackId = defaultAddress?.id ?? addresses[0]?.id ?? null;
+      setSelectedAddressId(fallbackId);
+      setExpandedAddressId(fallbackId);
+    }
 
-    const defaultAddress = addresses.find((item) => item.is_default);
-    setSelectedAddressId(defaultAddress?.id ?? addresses[0].id);
+    const expandedExists = addresses.some((item) => item.id === expandedAddressId);
+    if (!expandedExists) {
+      setExpandedAddressId(null);
+    }
+  }, [addresses, selectedAddressId, expandedAddressId]);
+
+  useEffect(() => {
+    if (paymentProvider !== 'MTN' && mtnPhone) {
+      setMtnPhone('');
+    }
+  }, [paymentProvider, mtnPhone]);
+
+  const total = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      const itemTotal =
+        item.line_total ?? Number(item.variant?.price || 0) * item.quantity;
+      return sum + Number(itemTotal);
+    }, 0);
+  }, [cartItems]);
+
+  const selectedAddress = useMemo(() => {
+    return addresses.find((item) => item.id === selectedAddressId) ?? null;
   }, [addresses, selectedAddressId]);
 
-  const total = useMemo(
-    () =>
-      cartItems.reduce(
-        (sum, item) =>
-          sum +
-          Number(item.line_total ?? Number(item.variant?.price || 0) * item.quantity),
-        0
-      ),
-    [cartItems]
+  const cashOption = PAYMENT_OPTIONS.find((option) => option.value === 'CASH');
+  const mobileMoneyOptions = PAYMENT_OPTIONS.filter(
+    (option) => option.value === 'MTN' || option.value === 'AIRTEL'
   );
 
-  const selectedAddress = useMemo(
-    () => addresses.find((item) => item.id === selectedAddressId) ?? null,
-    [addresses, selectedAddressId]
-  );
+  const isBusy = loading || pollingPayment;
+  const isPlaceOrderDisabled =
+    !cartItems.length || !selectedAddressId || isBusy;
 
-  const openAddAddress = () => {
-    setAddressModalVisible(true);
-  };
-
-  const closeAddAddress = () => {
-    setAddressModalVisible(false);
-  };
+  const openAddAddress = () => setAddressModalVisible(true);
+  const closeAddAddress = () => setAddressModalVisible(false);
 
   const submitNewAddress = async (values: CustomerAddressPayload) => {
     try {
@@ -398,13 +474,7 @@ export default function CheckoutScreen() {
 
       if (nextId) {
         setSelectedAddressId(nextId);
-      } else {
-        const defaultAddress = values.is_default
-          ? addresses.find((item) => item.is_default)
-          : null;
-        if (defaultAddress) {
-          setSelectedAddressId(defaultAddress.id);
-        }
+        setExpandedAddressId(nextId);
       }
 
       closeAddAddress();
@@ -420,8 +490,12 @@ export default function CheckoutScreen() {
     }
   };
 
-  const onSelectAddress = async (item: CustomerAddress) => {
+  const onSelectAddress = (item: CustomerAddress) => {
     setSelectedAddressId(item.id);
+  };
+
+  const onToggleAddressExpand = (itemId: number) => {
+    setExpandedAddressId((prev) => (prev === itemId ? null : itemId));
   };
 
   const onMakeDefaultAddress = async () => {
@@ -430,6 +504,7 @@ export default function CheckoutScreen() {
     try {
       await updateAddress(selectedAddress.id, { is_default: true });
       showSuccess('Default address updated successfully.');
+      await loadAuthedData().catch(() => undefined);
     } catch (error: any) {
       showError(
         error?.response?.data?.detail ||
@@ -439,7 +514,148 @@ export default function CheckoutScreen() {
     }
   };
 
+  const getMtnFailureMessage = (statusRes: any): string => {
+    const reason =
+      statusRes?.provider_response?.status_check?.reason ||
+      statusRes?.reason ||
+      '';
+
+    const normalized = String(reason).toUpperCase();
+
+    switch (normalized) {
+      case 'LOW_BALANCE_OR_PAYEE_LIMIT_REACHED_OR_NOT_ALLOWED':
+        return 'Payment failed. Your MTN line may not have enough balance, transaction limits may be reached, or the account is not allowed for this payment.';
+
+      case 'REJECTED':
+        return 'Payment was declined on your phone. Please try again.';
+
+      case 'EXPIRED':
+        return 'Payment request expired. Please try again.';
+
+      case 'NOT_ALLOWED':
+        return 'This MTN number is not allowed to make this payment.';
+
+      default:
+        return 'Payment failed. Please try again or use a different payment method.';
+    }
+  };
+
+  const pollPaymentStatus = useCallback(async (reference: string) => {
+    const maxAttempts = 15;
+    const intervalMs = 4000;
+
+    setPollingPayment(true);
+
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        await delay(intervalMs);
+
+        const statusRes = await paymentApi.checkStatus(reference);
+        const paymentStatus = String(statusRes?.status || '').toUpperCase();
+
+        if (paymentStatus === 'PAID') {
+          showSuccess('Payment successful.');
+          return true;
+        }
+
+        if (paymentStatus === 'FAILED') {
+          const message = getMtnFailureMessage(statusRes);
+          showError(message);
+          return false;
+        }
+
+        if (paymentStatus === 'CANCELLED') {
+          showError('You cancelled the payment on your phone.');
+          return false;
+        }
+
+        if (attempt === 5 || attempt === 10) {
+          showInfo('Still waiting for MTN payment approval...');
+        }
+      }
+
+      showInfo(
+        'Payment is still processing. Please confirm later from your payment status or orders.'
+      );
+      return false;
+    } catch (error: any) {
+      showError(
+        error?.response?.data?.detail ||
+          error?.message ||
+          'Could not confirm payment status right now.'
+      );
+      return false;
+    } finally {
+      setPollingPayment(false);
+    }
+  }, []);
+
+  const handleCashCheckout = useCallback(async () => {
+    if (!selectedAddressId) {
+      showInfo('Please select a delivery address.');
+      return;
+    }
+
+    const order = await checkout({ address_id: selectedAddressId });
+
+    try {
+      await paymentApi.create({
+        order: order.id,
+        provider: 'CASH',
+        amount: total,
+        currency: 'UGX',
+      });
+    } catch (paymentError: any) {
+      showError(
+        paymentError?.response?.data?.detail ||
+          paymentError?.message ||
+          'Order placed but payment record could not be saved.'
+      );
+    }
+
+    showSuccess(`Order ${order.slug} placed successfully.`);
+    await loadAuthedData().catch(() => undefined);
+    router.replace('/(tabs)/orders');
+  }, [checkout, loadAuthedData, selectedAddressId, total]);
+
+  const handleMTNCheckout = useCallback(async () => {
+    if (!selectedAddressId) {
+      showInfo('Please select a delivery address.');
+      return;
+    }
+
+    const normalizedPhone = normalizeUgPhone(mtnPhone);
+
+    if (!normalizedPhone) {
+      showInfo('Enter your MTN phone number.');
+      return;
+    }
+
+    if (!isValidUgPhone(normalizedPhone)) {
+      showError('Enter a valid Uganda number like 078XXXXXXX or +25678XXXXXXX.');
+      return;
+    }
+
+    const payment = await paymentApi.initiateMTN({
+      address_id: selectedAddressId,
+      phone_number: normalizedPhone,
+    });
+
+    showInfo('Approve the MTN Mobile Money prompt on your phone.');
+
+    const paid = await pollPaymentStatus(payment.reference);
+    if (!paid) return;
+
+    const result = await paymentApi.finalizeOrder(payment.reference);
+
+    showSuccess(`Order ${result.order.slug} placed successfully.`);
+    await loadAuthedData().catch(() => undefined);
+    router.replace('/(tabs)/orders');
+  }, [loadAuthedData, mtnPhone, pollPaymentStatus, selectedAddressId]);
+
   const onPlaceOrder = async () => {
+    if (isBusy) return;
+
     if (!cartItems.length) {
       showInfo('Add items before checking out.');
       return;
@@ -450,15 +666,25 @@ export default function CheckoutScreen() {
       return;
     }
 
+    if (paymentProvider === 'AIRTEL') {
+      showInfo('Airtel Money is not enabled yet.');
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const order = await checkout({ address_id: selectedAddressId });
+      if (paymentProvider === 'CASH') {
+        await handleCashCheckout();
+        return;
+      }
 
-      showSuccess(`Order ${order.slug} placed successfully.`);
+      if (paymentProvider === 'MTN') {
+        await handleMTNCheckout();
+        return;
+      }
 
-      setTimeout(() => {
-        router.replace('/(tabs)/orders');
-      }, 700);
+      showError('Unsupported payment method.');
     } catch (error: any) {
       showError(
         error?.response?.data?.detail ||
@@ -474,14 +700,6 @@ export default function CheckoutScreen() {
     <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Please log in before placing an order.">
         <View style={styles.container}>
-          {cartItems.length ? (
-            <View style={styles.topRow}>
-              <Text style={styles.countPill}>
-                {cartItems.length} item{cartItems.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-          ) : null}
-
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <Text style={styles.title}>Delivery address</Text>
@@ -502,7 +720,9 @@ export default function CheckoutScreen() {
                     key={item.id}
                     item={item}
                     selected={item.id === selectedAddressId}
+                    expanded={item.id === expandedAddressId}
                     onSelect={() => onSelectAddress(item)}
+                    onToggleExpand={() => onToggleAddressExpand(item.id)}
                   />
                 ))}
 
@@ -521,31 +741,129 @@ export default function CheckoutScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.title}>Order summary</Text>
-
+            <Text style={styles.title}>Payment method</Text>
             <View style={styles.divider} />
 
-            {cartItems.map((item) => (
-              <View key={item.id} style={styles.row}>
-                <View style={styles.itemInfo}>
-                  <Text numberOfLines={2} style={styles.itemText}>
-                    {item.product.title}
-                  </Text>
-
-                  <Text style={styles.itemMeta}>
-                    Qty {item.quantity}
-                    {item.variant?.name ? ` • ${item.variant.name}` : ''}
-                  </Text>
+            {cashOption ? (
+              <Pressable
+                onPress={() => setPaymentProvider(cashOption.value)}
+                style={[
+                  styles.cashPaymentOption,
+                  paymentProvider === cashOption.value &&
+                    styles.paymentOptionSelected,
+                ]}
+              >
+                <View style={styles.paymentRadio}>
+                  {paymentProvider === cashOption.value && (
+                    <View style={styles.paymentRadioInner} />
+                  )}
                 </View>
 
-                <Text style={styles.price}>
-                  {money(
-                    item.line_total ??
-                      Number(item.variant?.price || 0) * item.quantity
-                  )}
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.paymentLabel,
+                      paymentProvider === cashOption.value &&
+                        styles.paymentLabelSelected,
+                    ]}
+                  >
+                    {cashOption.label}
+                  </Text>
+                  <Text style={styles.paymentSubtitle}>
+                    {cashOption.subtitle}
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
+            <View style={styles.iconPaymentRow}>
+              {mobileMoneyOptions.map((option) => {
+                const selected = paymentProvider === option.value;
+                const icon =
+                  option.value === 'MTN'
+                    ? PAYMENT_ICONS.MTN
+                    : PAYMENT_ICONS.AIRTEL;
+                const disabled = option.value === 'AIRTEL';
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => {
+                      if (disabled) {
+                        showInfo('Airtel Money is coming soon.');
+                        return;
+                      }
+                      setPaymentProvider(option.value);
+                    }}
+                    style={[
+                      styles.iconPaymentCard,
+                      selected && styles.iconPaymentCardSelected,
+                      disabled && styles.disabledPaymentCard,
+                    ]}
+                  >
+                    <View style={styles.iconPaymentTop}>
+                      <Image
+                        source={icon}
+                        style={styles.smallPaymentIcon}
+                        resizeMode="contain"
+                      />
+
+                      <View style={styles.paymentRadio}>
+                        {selected && <View style={styles.paymentRadioInner} />}
+                      </View>
+                    </View>
+
+                    {disabled ? (
+                      <Text style={styles.comingSoonText}>Coming soon</Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {paymentProvider === 'MTN' ? (
+              <View style={styles.mtnPhoneWrap}>
+                <Text style={styles.sectionLabel}>MTN phone number</Text>
+                <TextInput
+                  placeholder="078XXXXXXX or +25678XXXXXXX"
+                  placeholderTextColor={colors.muted}
+                  value={mtnPhone}
+                  onChangeText={setMtnPhone}
+                  keyboardType="phone-pad"
+                  style={styles.input}
+                  editable={!isBusy}
+                />
+                <Text style={styles.helperText}>
+                  Use the number that will receive and approve the MTN prompt.
                 </Text>
               </View>
-            ))}
+            ) : null}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.title}>Order summary</Text>
+            <View style={styles.divider} />
+
+            {cartItems.map((item) => {
+              const itemTotal =
+                item.line_total ?? Number(item.variant?.price || 0) * item.quantity;
+
+              return (
+                <View key={item.id} style={styles.row}>
+                  <View style={styles.itemInfo}>
+                    <Text numberOfLines={2} style={styles.itemText}>
+                      {item.product.title}
+                    </Text>
+                    <Text style={styles.itemMeta}>
+                      Qty {item.quantity}
+                      {item.variant?.name ? ` • ${item.variant.name}` : ''}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.price}>{money(itemTotal)}</Text>
+                </View>
+              );
+            })}
 
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
@@ -556,14 +874,19 @@ export default function CheckoutScreen() {
           <Pressable
             style={[
               styles.button,
-              (!cartItems.length || !selectedAddressId || loading) &&
-                styles.buttonDisabled,
+              isPlaceOrderDisabled && styles.buttonDisabled,
             ]}
             onPress={onPlaceOrder}
-            disabled={loading || !cartItems.length || !selectedAddressId}
+            disabled={isPlaceOrderDisabled}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Placing order...' : 'Place order'}
+              {loading
+                ? paymentProvider === 'MTN'
+                  ? 'Starting payment...'
+                  : 'Placing order...'
+                : pollingPayment
+                ? 'Waiting for payment approval...'
+                : 'Place order'}
             </Text>
           </Pressable>
         </View>
@@ -584,23 +907,6 @@ const styles = StyleSheet.create({
   container: {
     gap: spacing.md,
     paddingBottom: spacing.xl,
-  },
-
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-
-  countPill: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
   },
 
   card: {
@@ -675,6 +981,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: colors.text,
+    flex: 1,
   },
 
   addressBadges: {
@@ -682,6 +989,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flexWrap: 'wrap',
+    justifyContent: 'flex-end',
   },
 
   defaultBadge: {
@@ -710,6 +1018,29 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+  expandBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  expandBtnText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.primary,
+    lineHeight: 20,
+  },
+
+  addressDetails: {
+    gap: 4,
+    marginTop: 4,
+  },
+
   cardText: {
     fontSize: 14,
     color: colors.text,
@@ -732,93 +1063,189 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  row: {
+  cashPaymentOption: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 14,
-  },
-
-  itemInfo: {
-    flex: 1,
-    gap: 4,
-  },
-
-  itemText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  itemMeta: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  price: {
-    fontWeight: '800',
-    color: colors.text,
-    fontSize: 14,
-  },
-
-  totalRow: {
-    marginTop: 6,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: spacing.md,
   },
 
-  totalLabel: {
-    fontSize: 18,
+  paymentOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+
+  paymentRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  paymentRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+
+  paymentLabel: {
+    fontSize: 15,
     fontWeight: '800',
     color: colors.text,
   },
 
-  totalValue: {
-    fontSize: 22,
-    fontWeight: '900',
+  paymentLabelSelected: {
     color: colors.primary,
   },
 
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingVertical: 16,
+  paymentSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.muted,
+  },
+
+  iconPaymentRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  iconPaymentCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 56,
+    justifyContent: 'center',
+  },
+
+  iconPaymentCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+
+  disabledPaymentCard: {
+    opacity: 0.7,
+  },
+
+  iconPaymentTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    justifyContent: 'space-between',
   },
 
-  buttonDisabled: {
-    opacity: 0.6,
+  smallPaymentIcon: {
+    width: 64,
+    height: 28,
   },
 
-  buttonText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 15,
+  comingSoonText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+
+  mtnPhoneWrap: {
+    gap: 8,
+  },
+
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  helperText: {
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 18,
+  },
+
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  textArea: {
+    minHeight: 100,
+  },
+
+  regionSection: {
+    gap: 10,
+  },
+
+  regionOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  regionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  regionChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+
+  regionChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+
+  regionChipTextActive: {
+    color: colors.primary,
+  },
+
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  switchLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
   },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: '#00000066',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    padding: spacing.lg,
   },
 
   modalCard: {
-    maxHeight: '90%',
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#fff',
+    borderRadius: 24,
     padding: spacing.lg,
-    gap: spacing.md,
+    maxHeight: '88%',
+    gap: 16,
   },
 
   modalTitle: {
@@ -828,101 +1255,33 @@ const styles = StyleSheet.create({
   },
 
   form: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: colors.text,
-  },
-
-  textArea: {
-    minHeight: 96,
-  },
-
-  regionSection: {
-    gap: spacing.xs,
-  },
-
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-  },
-
-  regionOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-
-  regionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-
-  regionChipActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-
-  regionChipText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  regionChipTextActive: {
-    color: colors.primary,
-    fontWeight: '800',
-  },
-
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-  },
-
-  switchLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
+    gap: 12,
+    paddingBottom: 8,
   },
 
   modalActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 12,
   },
 
   actionBtn: {
     flex: 1,
-    height: 48,
     borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   cancelBtn: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
 
   cancelBtnText: {
     color: colors.text,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
 
   saveBtn: {
@@ -930,7 +1289,77 @@ const styles = StyleSheet.create({
   },
 
   saveBtnText: {
-    color: colors.surface,
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '800',
+  },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  itemInfo: {
+    flex: 1,
+    gap: 4,
+  },
+
+  itemText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+
+  itemMeta: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+
+  price: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+  },
+
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.primary,
+  },
+
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
   },
 });
