@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 
 import { AuthGate } from '@/components/AuthGate';
 import { Screen } from '@/components/Screen';
@@ -125,6 +125,19 @@ function getItemCount(order?: Order) {
     (sum, item) => sum + Number(item.quantity || 0),
     0
   );
+}
+
+function formatDate(value?: string) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function RatingPicker({
@@ -311,6 +324,7 @@ export default function OrderDetailsScreen() {
   if (loadingOrders && !order) {
     return (
       <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
         <AuthGate message="Log in to view your order details.">
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -323,6 +337,7 @@ export default function OrderDetailsScreen() {
   if (!order) {
     return (
       <Screen>
+        <Stack.Screen options={{ headerShown: false }} />
         <AuthGate message="Log in to view your order details.">
           <View style={styles.notFoundWrap}>
             <Text style={styles.notFoundTitle}>Order not found</Text>
@@ -345,24 +360,18 @@ export default function OrderDetailsScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ headerShown: false }} />
+
       <AuthGate message="Log in to view your order details.">
         <ScrollView
           contentContainerStyle={styles.container}
           showsVerticalScrollIndicator={false}
         >
-          <Pressable onPress={() => router.back()} style={styles.backLink}>
-            <Ionicons name="arrow-back" size={18} color={colors.text} />
-            <Text style={styles.backLinkText}>Order Details</Text>
-          </Pressable>
-
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryTopRow}>
-              <View style={styles.summaryInfo}>
-                <Text style={styles.orderNo}>Order #{order.slug || order.id}</Text>
-                <Text style={styles.summaryMeta}>
-                  {itemCount} item{itemCount === 1 ? '' : 's'}
-                </Text>
-              </View>
+          <View style={styles.heroCard}>
+            <View style={styles.heroTopRow}>
+              <Pressable onPress={() => router.back()} style={styles.iconBackBtn}>
+                <Ionicons name="arrow-back" size={20} color={colors.text} />
+              </Pressable>
 
               <View
                 style={[
@@ -376,10 +385,27 @@ export default function OrderDetailsScreen() {
               </View>
             </View>
 
+            <Text style={styles.heroTitle}>Order Details</Text>
+            <Text style={styles.heroOrderNo}>#{order.slug || order.id}</Text>
             <Text style={styles.totalAmount}>{money(order.total_price ?? 0)}</Text>
 
-            <View style={styles.summaryDivider} />
+            <View style={styles.heroMetaRow}>
+              <View style={styles.metaPill}>
+                <Ionicons name="cube-outline" size={14} color={colors.muted} />
+                <Text style={styles.metaPillText}>
+                  {itemCount} item{itemCount === 1 ? '' : 's'}
+                </Text>
+              </View>
 
+              <View style={styles.metaPill}>
+                <Ionicons name="calendar-outline" size={14} color={colors.muted} />
+                <Text style={styles.metaPillText}>{formatDate(order.created_at)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
             <DetailRow label="Order ID" value={`#${order.slug || order.id}`} />
             <DetailRow
               label="Status"
@@ -390,12 +416,19 @@ export default function OrderDetailsScreen() {
               label="Items"
               value={`${itemCount} item${itemCount === 1 ? '' : 's'}`}
             />
+            <DetailRow label="Total" value={money(order.total_price ?? 0)} />
+            {!!order.description && (
+              <View style={styles.noteBox}>
+                <Text style={styles.noteLabel}>Order note</Text>
+                <Text style={styles.noteText}>{order.description}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Items in this order</Text>
 
-            {(order.items || []).map((item, index) => {
+            {(order.items || []).map((item) => {
               const image = getProductImage(item);
               const existingReview = reviewMap.get(item.product);
               const variantText = getVariantText(item);
@@ -403,13 +436,7 @@ export default function OrderDetailsScreen() {
               const subtotal = getItemSubtotal(item);
 
               return (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.productCard,
-                    index === 0 && styles.productCardFirst,
-                  ]}
-                >
+                <View key={item.id} style={styles.productCard}>
                   <View style={styles.productRow}>
                     <View style={styles.imageWrap}>
                       {image ? (
@@ -422,7 +449,7 @@ export default function OrderDetailsScreen() {
                         <View style={styles.imageFallback}>
                           <Ionicons
                             name="image-outline"
-                            size={20}
+                            size={22}
                             color={colors.muted}
                           />
                         </View>
@@ -440,12 +467,15 @@ export default function OrderDetailsScreen() {
                         </Text>
                       )}
 
-                      <Text style={styles.productMeta}>Qty: {item.quantity}</Text>
-                      <Text style={styles.productMeta}>
-                        Unit price: {money(unitPrice)}
-                      </Text>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.productMeta}>Qty: {item.quantity}</Text>
+                        <Text style={styles.productMeta}>
+                          Unit: {money(unitPrice)}
+                        </Text>
+                      </View>
+
                       <Text style={styles.productSubtotal}>
-                        Subtotal: {money(subtotal)}
+                        {money(subtotal)}
                       </Text>
 
                       {reviewAllowed ? (
@@ -506,57 +536,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  backLink: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-
-  backLinkText: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: '900',
-  },
-
-  summaryCard: {
+  heroCard: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
-    padding: 16,
-    gap: 10,
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
   },
 
-  summaryTopRow: {
+  heroTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10,
+    alignItems: 'center',
   },
 
-  summaryInfo: {
-    flex: 1,
+  iconBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 
-  orderNo: {
-    fontSize: 19,
+  heroTitle: {
+    fontSize: 24,
     fontWeight: '900',
     color: colors.text,
   },
 
-  summaryMeta: {
-    fontSize: 13,
+  heroOrderNo: {
+    fontSize: 14,
     color: colors.muted,
-    marginTop: 4,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
   totalAmount: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '900',
     color: colors.text,
+  },
+
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  metaPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
   },
 
   summaryDivider: {
@@ -570,6 +615,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+    paddingVertical: 2,
   },
 
   detailLabel: {
@@ -601,26 +647,46 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 16,
-    gap: 12,
+    gap: 14,
   },
 
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     color: colors.text,
   },
 
-  productCard: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 14,
+  noteBox: {
+    marginTop: 6,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 6,
   },
 
-  productCardFirst: {
-    borderTopWidth: 0,
-    paddingTop: 0,
+  noteLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.muted,
+    textTransform: 'uppercase',
+  },
+
+  noteText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+
+  productCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 18,
+    padding: 12,
   },
 
   productRow: {
@@ -630,11 +696,11 @@ const styles = StyleSheet.create({
   },
 
   imageWrap: {
-    width: 84,
-    height: 84,
-    borderRadius: 14,
+    width: 92,
+    height: 92,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -652,7 +718,7 @@ const styles = StyleSheet.create({
 
   productInfo: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
 
   productName: {
@@ -667,8 +733,15 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
 
+  priceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 2,
+  },
+
   productSubtotal: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text,
     fontWeight: '900',
     marginTop: 2,

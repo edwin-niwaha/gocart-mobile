@@ -68,7 +68,6 @@ export default function ResetPasswordScreen() {
           <View style={styles.container}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <Text style={styles.brand}>GoCart</Text>
                 <Text style={styles.title}>Reset password</Text>
                 <Text style={styles.subtitle}>
                   Enter the code sent to your email and choose a new password.

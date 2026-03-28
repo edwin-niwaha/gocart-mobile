@@ -122,14 +122,55 @@ function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
   );
 }
 
+function normalizeListResponse<T>(value: unknown): {
+  items: T[];
+  count: number;
+  next: string | null;
+  previous: string | null;
+  paginated: boolean;
+} {
+  if (isPaginatedResponse<T>(value)) {
+    return {
+      items: Array.isArray(value.results) ? value.results : [],
+      count: typeof value.count === 'number' ? value.count : 0,
+      next: value.next ?? null,
+      previous: value.previous ?? null,
+      paginated: true,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return {
+      items: value,
+      count: value.length,
+      next: null,
+      previous: null,
+      paginated: false,
+    };
+  }
+
+  return {
+    items: [],
+    count: 0,
+    next: null,
+    previous: null,
+    paginated: false,
+  };
+}
+
 export function ShopProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
 
   const [loading, setLoading] = useState(false);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const [nextOrdersUrl, setNextOrdersUrl] = useState<string | null>(null);
@@ -138,8 +179,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
   const [refreshingOrders, setRefreshingOrders] = useState(false);
 
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [totalNotifications, setTotalNotifications] = useState(0);
   const [nextNotificationsUrl, setNextNotificationsUrl] = useState<string | null>(null);
@@ -150,9 +189,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [markingNotificationIds, setMarkingNotificationIds] = useState<number[]>([]);
   const [markingAllNotifications, setMarkingAllNotifications] = useState(false);
 
-  const resetAuthedState = useCallback(() => {
-    setCartItems([]);
-    setWishlistItems([]);
+  const resetOrdersState = useCallback(() => {
     setOrders([]);
     setTotalOrders(0);
     setNextOrdersUrl(null);
@@ -160,8 +197,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setLoadingOrders(false);
     setLoadingMoreOrders(false);
     setRefreshingOrders(false);
-    setReviews([]);
-    setAddresses([]);
+  }, []);
+
+  const resetNotificationsState = useCallback(() => {
     setNotifications([]);
     setTotalNotifications(0);
     setNextNotificationsUrl(null);
@@ -173,50 +211,49 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setMarkingAllNotifications(false);
   }, []);
 
-  const applyOrdersPage = useCallback(
-    (
-      payload: PaginatedResponse<Order>,
-      mode: 'replace' | 'append' = 'replace'
-    ) => {
-      const safeResults = Array.isArray(payload.results) ? payload.results : [];
+  const resetAuthedState = useCallback(() => {
+    setCartItems([]);
+    setWishlistItems([]);
+    setReviews([]);
+    setAddresses([]);
+    resetOrdersState();
+    resetNotificationsState();
+  }, [resetNotificationsState, resetOrdersState]);
+
+  const applyOrdersResponse = useCallback(
+    (response: unknown, mode: 'replace' | 'append' = 'replace') => {
+      const normalized = normalizeListResponse<Order>(response);
 
       setOrders((current) => {
-        if (mode === 'replace') {
-          return safeResults;
-        }
+        if (mode === 'replace') return normalized.items;
 
-        const existingIds = new Set(current.map((item) => item.id));
-        const dedupedIncoming = safeResults.filter((item) => !existingIds.has(item.id));
-        return [...current, ...dedupedIncoming];
+        const seen = new Set(current.map((item) => item.id));
+        const incoming = normalized.items.filter((item) => !seen.has(item.id));
+        return [...current, ...incoming];
       });
 
-      setTotalOrders(typeof payload.count === 'number' ? payload.count : safeResults.length);
-      setNextOrdersUrl(payload.next ?? null);
-      setHasMoreOrders(Boolean(payload.next));
+      setTotalOrders(normalized.count);
+      setNextOrdersUrl(normalized.next);
+      setHasMoreOrders(Boolean(normalized.next));
     },
     []
   );
 
-  const applyNotificationsPage = useCallback(
-    (
-      payload: PaginatedResponse<Notification>,
-      mode: 'replace' | 'append' = 'replace'
-    ) => {
-      const safeResults = Array.isArray(payload.results) ? payload.results : [];
+  const applyNotificationsResponse = useCallback(
+    (response: unknown, mode: 'replace' | 'append' = 'replace') => {
+      const normalized = normalizeListResponse<Notification>(response);
 
       setNotifications((current) => {
-        if (mode === 'replace') {
-          return safeResults;
-        }
+        if (mode === 'replace') return normalized.items;
 
-        const existingIds = new Set(current.map((item) => item.id));
-        const dedupedIncoming = safeResults.filter((item) => !existingIds.has(item.id));
-        return [...current, ...dedupedIncoming];
+        const seen = new Set(current.map((item) => item.id));
+        const incoming = normalized.items.filter((item) => !seen.has(item.id));
+        return [...current, ...incoming];
       });
 
-      setTotalNotifications(typeof payload.count === 'number' ? payload.count : safeResults.length);
-      setNextNotificationsUrl(payload.next ?? null);
-      setHasMoreNotifications(Boolean(payload.next));
+      setTotalNotifications(normalized.count);
+      setNextNotificationsUrl(normalized.next);
+      setHasMoreNotifications(Boolean(normalized.next));
     },
     []
   );
@@ -243,176 +280,100 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
   const loadOrders = useCallback(async () => {
     if (!isAuthenticated) {
-      setOrders([]);
-      setTotalOrders(0);
-      setNextOrdersUrl(null);
-      setHasMoreOrders(false);
+      resetOrdersState();
       return;
     }
 
     setLoadingOrders(true);
-
     try {
       const response = await orderApi.list();
-
-      if (isPaginatedResponse<Order>(response)) {
-        applyOrdersPage(response, 'replace');
-      } else if (Array.isArray(response)) {
-        setOrders(response);
-        setTotalOrders(response.length);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      } else {
-        setOrders([]);
-        setTotalOrders(0);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      }
+      applyOrdersResponse(response, 'replace');
     } catch (error) {
       console.log('loadOrders error:', error);
-      setOrders([]);
-      setTotalOrders(0);
-      setNextOrdersUrl(null);
-      setHasMoreOrders(false);
+      resetOrdersState();
       showError('Failed to load orders.');
     } finally {
       setLoadingOrders(false);
     }
-  }, [applyOrdersPage, isAuthenticated]);
+  }, [applyOrdersResponse, isAuthenticated, resetOrdersState]);
 
   const refreshOrders = useCallback(async () => {
     if (!isAuthenticated) {
-      setOrders([]);
-      setTotalOrders(0);
-      setNextOrdersUrl(null);
-      setHasMoreOrders(false);
+      resetOrdersState();
       return;
     }
 
     setRefreshingOrders(true);
-
     try {
       const response = await orderApi.list();
-
-      if (isPaginatedResponse<Order>(response)) {
-        applyOrdersPage(response, 'replace');
-      } else if (Array.isArray(response)) {
-        setOrders(response);
-        setTotalOrders(response.length);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      }
+      applyOrdersResponse(response, 'replace');
     } catch (error) {
       console.log('refreshOrders error:', error);
       showError('Failed to refresh orders.');
     } finally {
       setRefreshingOrders(false);
     }
-  }, [applyOrdersPage, isAuthenticated]);
+  }, [applyOrdersResponse, isAuthenticated, resetOrdersState]);
 
   const loadMoreOrders = useCallback(async () => {
-    if (!isAuthenticated) return;
-    if (!nextOrdersUrl) return;
-    if (loadingMoreOrders) return;
+    if (!isAuthenticated || !nextOrdersUrl || loadingMoreOrders) return;
 
     setLoadingMoreOrders(true);
-
     try {
       const response = await orderApi.list(nextOrdersUrl);
-
-      if (isPaginatedResponse<Order>(response)) {
-        applyOrdersPage(response, 'append');
-      }
+      applyOrdersResponse(response, 'append');
     } catch (error) {
       console.log('loadMoreOrders error:', error);
       showError('Failed to load more orders.');
     } finally {
       setLoadingMoreOrders(false);
     }
-  }, [applyOrdersPage, isAuthenticated, loadingMoreOrders, nextOrdersUrl]);
+  }, [applyOrdersResponse, isAuthenticated, loadingMoreOrders, nextOrdersUrl]);
 
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated) {
-      setNotifications([]);
-      setTotalNotifications(0);
-      setNextNotificationsUrl(null);
-      setHasMoreNotifications(false);
+      resetNotificationsState();
       return;
     }
 
     setLoadingNotifications(true);
-
     try {
       const response = await notificationApi.list();
-
-      if (isPaginatedResponse<Notification>(response)) {
-        applyNotificationsPage(response, 'replace');
-      } else if (Array.isArray(response)) {
-        setNotifications(response);
-        setTotalNotifications(response.length);
-        setNextNotificationsUrl(null);
-        setHasMoreNotifications(false);
-      } else {
-        setNotifications([]);
-        setTotalNotifications(0);
-        setNextNotificationsUrl(null);
-        setHasMoreNotifications(false);
-      }
+      applyNotificationsResponse(response, 'replace');
     } catch (error) {
       console.log('loadNotifications error:', error);
-      setNotifications([]);
-      setTotalNotifications(0);
-      setNextNotificationsUrl(null);
-      setHasMoreNotifications(false);
+      resetNotificationsState();
       showError('Failed to load notifications.');
     } finally {
       setLoadingNotifications(false);
     }
-  }, [applyNotificationsPage, isAuthenticated]);
+  }, [applyNotificationsResponse, isAuthenticated, resetNotificationsState]);
 
   const refreshNotifications = useCallback(async () => {
     if (!isAuthenticated) {
-      setNotifications([]);
-      setTotalNotifications(0);
-      setNextNotificationsUrl(null);
-      setHasMoreNotifications(false);
+      resetNotificationsState();
       return;
     }
 
     setRefreshingNotifications(true);
-
     try {
       const response = await notificationApi.list();
-
-      if (isPaginatedResponse<Notification>(response)) {
-        applyNotificationsPage(response, 'replace');
-      } else if (Array.isArray(response)) {
-        setNotifications(response);
-        setTotalNotifications(response.length);
-        setNextNotificationsUrl(null);
-        setHasMoreNotifications(false);
-      }
+      applyNotificationsResponse(response, 'replace');
     } catch (error) {
       console.log('refreshNotifications error:', error);
       showError('Failed to refresh notifications.');
     } finally {
       setRefreshingNotifications(false);
     }
-  }, [applyNotificationsPage, isAuthenticated]);
+  }, [applyNotificationsResponse, isAuthenticated, resetNotificationsState]);
 
   const loadMoreNotifications = useCallback(async () => {
-    if (!isAuthenticated) return;
-    if (!nextNotificationsUrl) return;
-    if (loadingMoreNotifications) return;
+    if (!isAuthenticated || !nextNotificationsUrl || loadingMoreNotifications) return;
 
     setLoadingMoreNotifications(true);
-
     try {
       const response = await notificationApi.list(nextNotificationsUrl);
-
-      if (isPaginatedResponse<Notification>(response)) {
-        applyNotificationsPage(response, 'append');
-      }
+      applyNotificationsResponse(response, 'append');
     } catch (error) {
       console.log('loadMoreNotifications error:', error);
       showError('Failed to load more notifications.');
@@ -420,7 +381,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setLoadingMoreNotifications(false);
     }
   }, [
-    applyNotificationsPage,
+    applyNotificationsResponse,
     isAuthenticated,
     loadingMoreNotifications,
     nextNotificationsUrl,
@@ -455,60 +416,31 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       setReviews(Array.isArray(nextReviews) ? nextReviews : []);
-      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
 
-      if (isPaginatedResponse<Order>(nextOrders)) {
-        applyOrdersPage(nextOrders, 'replace');
-      } else if (Array.isArray(nextOrders)) {
-        setOrders(nextOrders);
-        setTotalOrders(nextOrders.length);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      } else {
-        setOrders([]);
-        setTotalOrders(0);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      }
+      const normalizedAddresses = normalizeListResponse<CustomerAddress>(nextAddresses);
+      setAddresses(normalizedAddresses.items);
 
-      if (isPaginatedResponse<Notification>(nextNotifications)) {
-        applyNotificationsPage(nextNotifications, 'replace');
-      } else if (Array.isArray(nextNotifications)) {
-        setNotifications(nextNotifications);
-        setTotalNotifications(nextNotifications.length);
-        setNextNotificationsUrl(null);
-        setHasMoreNotifications(false);
-      } else {
-        setNotifications([]);
-        setTotalNotifications(0);
-        setNextNotificationsUrl(null);
-        setHasMoreNotifications(false);
-      }
+      applyOrdersResponse(nextOrders, 'replace');
+      applyNotificationsResponse(nextNotifications, 'replace');
     } catch (error) {
       console.log('loadAuthedData error:', error);
-      setCartItems([]);
-      setWishlistItems([]);
-      setOrders([]);
-      setTotalOrders(0);
-      setNextOrdersUrl(null);
-      setHasMoreOrders(false);
-      setReviews([]);
-      setAddresses([]);
-      setNotifications([]);
-      setTotalNotifications(0);
-      setNextNotificationsUrl(null);
-      setHasMoreNotifications(false);
+      resetAuthedState();
       showError('Failed to load your account data.');
     } finally {
       setLoading(false);
     }
-  }, [applyNotificationsPage, applyOrdersPage, isAuthenticated, resetAuthedState]);
+  }, [applyNotificationsResponse, applyOrdersResponse, isAuthenticated, resetAuthedState]);
+
+  const reloadAddresses = useCallback(async () => {
+    const nextAddresses = await addressApi.list();
+    const normalized = normalizeListResponse<CustomerAddress>(nextAddresses);
+    setAddresses(normalized.items);
+  }, []);
 
   const addAddress = useCallback(async (payload: CustomerAddressPayload) => {
     try {
       const created = await addressApi.create(payload);
-      const nextAddresses = await addressApi.list();
-      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+      await reloadAddresses();
       showSuccess('Address added successfully.');
       return created ?? null;
     } catch (error: any) {
@@ -516,14 +448,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showError(getApiErrorMessage(error, 'Failed to add address.'));
       return null;
     }
-  }, []);
+  }, [reloadAddresses]);
 
   const updateAddress = useCallback(
     async (id: number, payload: CustomerAddressPayload) => {
       try {
         await addressApi.update(id, payload);
-        const nextAddresses = await addressApi.list();
-        setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+        await reloadAddresses();
         showSuccess('Address updated successfully.');
         return true;
       } catch (error: any) {
@@ -532,14 +463,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    []
+    [reloadAddresses]
   );
 
   const removeAddress = useCallback(async (id: number) => {
     try {
       await addressApi.remove(id);
-      const nextAddresses = await addressApi.list();
-      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
+      await reloadAddresses();
       showSuccess('Address removed successfully.');
       return true;
     } catch (error: any) {
@@ -547,7 +477,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showError(getApiErrorMessage(error, 'Failed to remove address.'));
       return false;
     }
-  }, []);
+  }, [reloadAddresses]);
 
   const addReview = useCallback(
     async (payload: { product: number; rating: number; comment: string }) => {
@@ -598,7 +528,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
       showSuccess('Product added to cart.');
       return true;
     } catch (error: any) {
@@ -631,10 +560,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const removeCartItem = useCallback(async (itemId: number) => {
     try {
       await cartApi.removeItem(itemId);
-
       const nextCartItems = await cartApi.listItems();
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-
       showSuccess('Item removed from cart.');
       return true;
     } catch (error: any) {
@@ -692,62 +619,43 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         cartApi.listItems(),
       ]);
 
-      if (isPaginatedResponse<Order>(nextOrders)) {
-        applyOrdersPage(nextOrders, 'replace');
-      } else {
-        setOrders(Array.isArray(nextOrders) ? nextOrders : []);
-        setTotalOrders(Array.isArray(nextOrders) ? nextOrders.length : 0);
-        setNextOrdersUrl(null);
-        setHasMoreOrders(false);
-      }
-
+      applyOrdersResponse(nextOrders, 'replace');
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
-      showSuccess('Checkout completed successfully.');
 
+      showSuccess('Checkout completed successfully.');
       return order;
     },
-    [addresses, cartItems, applyOrdersPage]
+    [addresses, applyOrdersResponse, cartItems]
   );
 
   const markNotificationRead = useCallback(async (id: number) => {
     try {
-      setMarkingNotificationIds((current) => {
-        const safeCurrent = Array.isArray(current) ? current : [];
-        return safeCurrent.includes(id) ? safeCurrent : [...safeCurrent, id];
-      });
+      setMarkingNotificationIds((current) =>
+        current.includes(id) ? current : [...current, id]
+      );
 
       const updated = await notificationApi.markRead(id);
 
-      setNotifications((current) => {
-        const safeCurrent = Array.isArray(current) ? current : [];
-        return safeCurrent.map((item) =>
+      setNotifications((current) =>
+        current.map((item) =>
           item.id === id
             ? {
                 ...item,
                 ...(updated ?? {}),
                 is_read: true,
-                read_at:
-                  updated?.read_at ??
-                  item.read_at ??
-                  new Date().toISOString(),
+                read_at: updated?.read_at ?? item.read_at ?? new Date().toISOString(),
               }
             : item
-        );
-      });
+        )
+      );
 
       return true;
     } catch (error: any) {
-      console.log(
-        'markNotificationRead error:',
-        error?.response?.data || error?.message
-      );
+      console.log('markNotificationRead error:', error?.response?.data || error?.message);
       showError('Failed to mark notification as read.');
       return false;
     } finally {
-      setMarkingNotificationIds((current) => {
-        const safeCurrent = Array.isArray(current) ? current : [];
-        return safeCurrent.filter((item) => item !== id);
-      });
+      setMarkingNotificationIds((current) => current.filter((item) => item !== id));
     }
   }, []);
 
@@ -759,22 +667,18 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const now = new Date().toISOString();
 
-      setNotifications((current) => {
-        const safeCurrent = Array.isArray(current) ? current : [];
-        return safeCurrent.map((item) => ({
+      setNotifications((current) =>
+        current.map((item) => ({
           ...item,
           is_read: true,
           read_at: item.read_at ?? now,
-        }));
-      });
+        }))
+      );
 
       showSuccess('All notifications marked as read.');
       return true;
     } catch (error: any) {
-      console.log(
-        'markAllNotificationsRead error:',
-        error?.response?.data || error?.message
-      );
+      console.log('markAllNotificationsRead error:', error?.response?.data || error?.message);
       showError('Failed to mark all notifications as read.');
       return false;
     } finally {

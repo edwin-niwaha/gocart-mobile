@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link, Stack } from 'expo-router';
+
 import {
   Alert,
   KeyboardAvoidingView,
@@ -61,6 +63,13 @@ export default function ChangePasswordScreen() {
   };
 
   return (
+        <>
+      <Stack.Screen
+        options={{
+          title: 'Change Password',
+          headerBackTitleVisible: false,
+        }}
+      />
     <Screen scroll contentContainerStyle={styles.page}>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -172,7 +181,9 @@ export default function ChangePasswordScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
+        </>
   );
+
 }
 
 const styles = StyleSheet.create({

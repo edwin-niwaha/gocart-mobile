@@ -13,7 +13,6 @@ type SettingsRowProps = {
   subtitle?: string;
   danger?: boolean;
   onPress?: () => void;
-  actionText?: string;
 };
 
 function SettingsRow({
@@ -23,8 +22,9 @@ function SettingsRow({
   subtitle,
   danger,
   onPress,
-  actionText = 'Open',
 }: SettingsRowProps) {
+  const isLinkRow = !!href;
+
   const content = (
     <Pressable
       onPress={onPress}
@@ -56,9 +56,11 @@ function SettingsRow({
       </View>
 
       <View style={styles.rowRight}>
-        <Text style={[styles.actionText, danger && styles.dangerText]}>
-          {actionText}
-        </Text>
+        {isLinkRow ? (
+          <Text style={styles.chevron}>›</Text>
+        ) : danger ? (
+          <Text style={[styles.logoutText, styles.dangerText]}>Exit</Text>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -94,36 +96,12 @@ export default function SettingsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Settings',
+          title: '⚙️ Settings',
           headerBackTitleVisible: false,
         }}
       />
 
       <Screen scroll contentContainerStyle={styles.page}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>⚙️</Text>
-            </View>
-
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.title}>Settings</Text>
-              <Text style={styles.subtitleText}>
-                Manage your account, privacy, support, and security options in
-                one place.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.heroFooter}>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>
-                {user?.is_email_verified ? 'Email Verified' : 'Email Not Verified'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
         <View style={styles.section}>
           <SectionTitle
             title="Account"
@@ -215,7 +193,6 @@ export default function SettingsScreen() {
               subtitle="Securely sign out from this device"
               onPress={logout}
               danger
-              actionText="Exit"
             />
           </View>
         </View>
@@ -230,71 +207,6 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.xl,
     backgroundColor: colors.background,
-  },
-
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    gap: 14,
-  },
-
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
-  },
-
-  heroBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-
-  heroBadgeText: {
-    fontSize: 22,
-  },
-
-  heroTextWrap: {
-    flex: 1,
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 4,
-  },
-
-  subtitleText: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.muted,
-  },
-
-  heroFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-
-  statusPill: {
-    backgroundColor: colors.background,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  statusPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.text,
   },
 
   section: {
@@ -392,10 +304,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  actionText: {
+  chevron: {
+    fontSize: 22,
+    color: colors.muted,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+
+  logoutText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.muted,
   },
 
   pressed: {

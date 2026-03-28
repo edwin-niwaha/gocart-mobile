@@ -680,9 +680,15 @@ export const addressApi = {
       return data;
     } catch (error: any) {
       console.log(`DELETE /addresses/${id}/ error:`, error?.response?.data || error.message);
-      throw error;
+
+      const message =
+        error?.response?.data?.detail ||
+        'Failed to delete address. Please try again.';
+
+      throw new Error(message);
     }
   },
+
 };
 
 // paymentApi

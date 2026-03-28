@@ -97,11 +97,7 @@ function AddressForm({
       return;
     }
 
-    if (
-      phoneNumber &&
-      additionalTelephone &&
-      phoneNumber === additionalTelephone
-    ) {
+    if (phoneNumber && additionalTelephone && phoneNumber === additionalTelephone) {
       Alert.alert(
         'Invalid phone numbers',
         'Additional telephone must be different from phone number.'
@@ -247,11 +243,15 @@ function AddressForm({
 
 function AddressCard({
   item,
+  expanded,
+  onToggleExpand,
   onEdit,
   onDelete,
   onMakeDefault,
 }: {
   item: CustomerAddress;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onMakeDefault: () => void;
@@ -260,50 +260,95 @@ function AddressCard({
     REGION_OPTIONS.find((option) => option.value === item.region)?.label ??
     item.region;
 
+  const previewLine = [item.street_name, item.city]
+    .filter(Boolean)
+    .join(', ');
+
   return (
     <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.labelWrap}>
-          <Text style={styles.cardTitle}>{item.city}</Text>
+      <View style={styles.cardTopRow}>
+        <View style={styles.cardTitleWrap}>
+          <Text style={styles.cardTitle}>{item.city || 'Address'}</Text>
           {item.is_default && (
             <View style={styles.defaultBadge}>
               <Text style={styles.defaultBadgeText}>Default</Text>
             </View>
           )}
         </View>
-      </View>
 
-      <Text style={styles.cardText}>{item.street_name}</Text>
-      <Text style={styles.cardText}>{item.city}</Text>
-      <Text style={styles.cardText}>{regionLabel}</Text>
-
-      {!!item.phone_number && (
-        <Text style={styles.cardText}>Phone: {item.phone_number}</Text>
-      )}
-
-      {!!item.additional_telephone && (
-        <Text style={styles.cardText}>Alt: {item.additional_telephone}</Text>
-      )}
-
-      {!!item.additional_information && (
-        <Text style={styles.cardText}>{item.additional_information}</Text>
-      )}
-
-      <View style={styles.cardActions}>
-        {!item.is_default && (
-          <Pressable onPress={onMakeDefault} style={styles.smallBtn}>
-            <Text style={styles.smallBtnText}>Make default</Text>
-          </Pressable>
-        )}
-
-        <Pressable onPress={onEdit} style={styles.smallBtn}>
-          <Text style={styles.smallBtnText}>Edit</Text>
-        </Pressable>
-
-        <Pressable onPress={onDelete} style={[styles.smallBtn, styles.deleteBtn]}>
-          <Text style={[styles.smallBtnText, styles.deleteBtnText]}>Delete</Text>
+        <Pressable onPress={onToggleExpand} style={styles.expandBtn}>
+          <Text style={styles.expandBtnText}>{expanded ? '-' : '+'}</Text>
         </Pressable>
       </View>
+
+      <Text style={styles.previewText} numberOfLines={expanded ? undefined : 1}>
+        {previewLine || 'No address summary'}
+      </Text>
+
+      {!expanded ? (
+        <Text style={styles.previewSubtext}>{regionLabel}</Text>
+      ) : (
+        <>
+          <View style={styles.divider} />
+
+          <View style={styles.detailsBlock}>
+            <Text style={styles.detailLabel}>Street</Text>
+            <Text style={styles.cardText}>{item.street_name || '-'}</Text>
+          </View>
+
+          <View style={styles.detailsBlock}>
+            <Text style={styles.detailLabel}>City</Text>
+            <Text style={styles.cardText}>{item.city || '-'}</Text>
+          </View>
+
+          <View style={styles.detailsBlock}>
+            <Text style={styles.detailLabel}>Region</Text>
+            <Text style={styles.cardText}>{regionLabel}</Text>
+          </View>
+
+          {!!item.phone_number && (
+            <View style={styles.detailsBlock}>
+              <Text style={styles.detailLabel}>Phone</Text>
+              <Text style={styles.cardText}>{item.phone_number}</Text>
+            </View>
+          )}
+
+          {!!item.additional_telephone && (
+            <View style={styles.detailsBlock}>
+              <Text style={styles.detailLabel}>Alternative phone</Text>
+              <Text style={styles.cardText}>{item.additional_telephone}</Text>
+            </View>
+          )}
+
+          {!!item.additional_information && (
+            <View style={styles.detailsBlock}>
+              <Text style={styles.detailLabel}>Additional info</Text>
+              <Text style={styles.cardText}>{item.additional_information}</Text>
+            </View>
+          )}
+
+          <View style={styles.cardActions}>
+            {!item.is_default && (
+              <Pressable onPress={onMakeDefault} style={styles.secondaryBtn}>
+                <Text style={styles.secondaryBtnText}>Make default</Text>
+              </Pressable>
+            )}
+
+            <Pressable onPress={onEdit} style={styles.secondaryBtn}>
+              <Text style={styles.secondaryBtnText}>Edit</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onDelete}
+              style={[styles.secondaryBtn, styles.deleteBtn]}
+            >
+              <Text style={[styles.secondaryBtnText, styles.deleteBtnText]}>
+                Delete
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -320,6 +365,7 @@ export default function AddressesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<CustomerAddress | null>(null);
+  const [expandedIds, setExpandedIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
@@ -354,6 +400,12 @@ export default function AddressesScreen() {
     setEditing(null);
   };
 
+  const toggleExpand = (id: number) => {
+    setExpandedIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    );
+  };
+
   const submit = async (values: CustomerAddressPayload) => {
     try {
       setSaving(true);
@@ -376,7 +428,13 @@ export default function AddressesScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => removeAddress(item.id),
+        onPress: async () => {
+          try {
+            await removeAddress(item.id);
+          } catch (error: any) {
+            Alert.alert('Delete failed', error.message || 'Could not delete address.');
+          }
+        },
       },
     ]);
   };
@@ -386,29 +444,46 @@ export default function AddressesScreen() {
   };
 
   return (
-    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
+    <Screen scroll contentContainerStyle={styles.screenContent}>
       <AuthGate message="Log in to manage your addresses.">
         <View style={styles.container}>
-          <Pressable onPress={openAdd} style={styles.addBtn}>
-            <Text style={styles.addBtnText}>+ Add Address</Text>
-          </Pressable>
+          <View style={styles.heroCard}>
+            <View style={styles.heroTextWrap}>
+              <Text style={styles.pageTitle}>My Addresses</Text>
+              <Text style={styles.pageSubtitle}>
+                Save and manage delivery locations for faster checkout.
+              </Text>
+            </View>
+
+            <Pressable onPress={openAdd} style={styles.addBtn}>
+              <Text style={styles.addBtnText}>+ Add Address</Text>
+            </Pressable>
+          </View>
 
           {!addresses.length ? (
-            <EmptyState
-              title="No addresses yet"
-              subtitle="Add a delivery address to make checkout faster."
-            />
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                title="No addresses yet"
+                subtitle="Add a delivery address to make checkout faster."
+              />
+            </View>
           ) : (
             <View style={styles.list}>
-              {addresses.map((item) => (
-                <AddressCard
-                  key={item.id}
-                  item={item}
-                  onEdit={() => openEdit(item)}
-                  onDelete={() => confirmDelete(item)}
-                  onMakeDefault={() => makeDefault(item)}
-                />
-              ))}
+              {addresses.map((item) => {
+                const expanded = expandedIds.includes(item.id);
+
+                return (
+                  <AddressCard
+                    key={item.id}
+                    item={item}
+                    expanded={expanded}
+                    onToggleExpand={() => toggleExpand(item.id)}
+                    onEdit={() => openEdit(item)}
+                    onDelete={() => confirmDelete(item)}
+                    onMakeDefault={() => makeDefault(item)}
+                  />
+                );
+              })}
             </View>
           )}
         </View>
@@ -426,9 +501,40 @@ export default function AddressesScreen() {
 }
 
 const styles = StyleSheet.create({
+  screenContent: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
   container: {
     gap: spacing.md,
-    paddingBottom: spacing.xl,
+  },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  heroTextWrap: {
+    gap: 6,
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  pageSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+  emptyWrap: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    padding: spacing.md,
   },
   list: {
     gap: spacing.md,
@@ -437,58 +543,102 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: spacing.lg,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
-  cardHeader: {
+  cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  labelWrap: {
+  cardTitleWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     flexWrap: 'wrap',
+    gap: 8,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: colors.text,
   },
+  previewText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  previewSubtext: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  detailsBlock: {
+    gap: 2,
+  },
   cardText: {
     fontSize: 14,
+    lineHeight: 20,
     color: colors.text,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 4,
   },
   defaultBadge: {
     backgroundColor: colors.primarySoft,
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   defaultBadgeText: {
     color: colors.primary,
     fontSize: 11,
     fontWeight: '800',
   },
-  cardActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  smallBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+  expandBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  smallBtnText: {
+  expandBtnText: {
+    fontSize: 20,
+    fontWeight: '900',
     color: colors.text,
-    fontSize: 12,
+    lineHeight: 22,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  secondaryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secondaryBtnText: {
+    color: colors.text,
+    fontSize: 13,
     fontWeight: '700',
   },
   deleteBtn: {
@@ -499,7 +649,7 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   addBtn: {
-    height: 48,
+    height: 50,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',

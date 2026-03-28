@@ -86,8 +86,6 @@ export default function LoginScreen() {
           <View style={styles.container}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <Text style={styles.brand}>GoCart</Text>
-                <Text style={styles.title}>Login to your account</Text>
                 <Text style={styles.subtitle}>
                   Welcome back. Sign in to continue shopping.
                 </Text>

@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
 import { Screen } from '@/components/Screen';
@@ -41,6 +41,13 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
+            <>
+      <Stack.Screen
+        options={{
+          title: 'Forgot Password',
+          headerBackTitleVisible: false,
+        }}
+      />
     <Screen scroll contentContainerStyle={styles.page}>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -54,7 +61,6 @@ export default function ForgotPasswordScreen() {
           <View style={styles.container}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <Text style={styles.brand}>GoCart</Text>
                 <Text style={styles.title}>Forgot password</Text>
                 <Text style={styles.subtitle}>
                   Enter your email and we&apos;ll send you a reset code.
@@ -106,6 +112,7 @@ export default function ForgotPasswordScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
+    </>
   );
 }
 

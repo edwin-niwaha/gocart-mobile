@@ -116,8 +116,9 @@ export default function NotificationsScreen() {
       notifications.length ? (
         <View style={styles.topRow}>
           <Text style={styles.countPill}>
-            {totalNotifications} notification
-            {totalNotifications === 1 ? '' : 's'}
+            {totalNotifications > 10
+              ? `10+ (${totalNotifications})`
+              : `${totalNotifications} notification${totalNotifications === 1 ? '' : 's'}`}
           </Text>
 
           <Pressable

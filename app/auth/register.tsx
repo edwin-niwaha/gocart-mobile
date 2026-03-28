@@ -110,14 +110,6 @@ export default function RegisterScreen() {
         >
           <View style={styles.container}>
             <View style={styles.content}>
-              <View style={styles.header}>
-                <Text style={styles.brand}>GoCart</Text>
-                <Text style={styles.title}>Create account</Text>
-                <Text style={styles.subtitle}>
-                  Fill in your details to get started.
-                </Text>
-              </View>
-
               <View style={styles.card}>
                 <Text style={styles.cardSubtitle}>
                   Create your account to start shopping on GoCart
