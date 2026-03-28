@@ -1,5 +1,7 @@
-import { api } from '@/api/client';
+import { api, API_BASE_URL } from '@/api/client';
 import { normalizeList } from '@/utils/format';
+import { getTokens } from '@/utils/storage';
+
 import type {
   AuthResponse,
   Cart,
@@ -111,7 +113,9 @@ function toList<T>(data: ListResponse<T> | { results?: T[] } | unknown): T[] {
   return [];
 }
 
-/// API service functions
+
+
+// Auth API
 export const authApi = {
   async register(payload: {
     email: string;
@@ -148,6 +152,62 @@ export const authApi = {
     }
   },
 
+
+  async updateProfile(payload: FormData) {
+    const tokens = await getTokens();
+
+    const response = await fetch(`${API_BASE_URL}/auth/me/`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        ...(tokens?.access
+          ? { Authorization: `Bearer ${tokens.access}` }
+          : {}),
+      },
+      body: payload,
+    });
+
+    const text = await response.text();
+
+    let data: any = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+
+    if (!response.ok) {
+      console.log('PATCH /auth/me/ FETCH status:', response.status);
+      console.log('PATCH /auth/me/ FETCH response:', data);
+      throw new Error(
+        typeof data === 'string'
+          ? data
+          : data?.detail || 'Profile update failed.'
+      );
+    }
+
+    return data;
+  },
+
+  async updateProfileJson(payload: {
+    username: string;
+    first_name: string;
+    last_name: string;
+  }) {
+    try {
+      const { data } = await api.patch('/auth/me/', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      });
+      return data;
+    } catch (error: any) {
+      console.log('PATCH /auth/me/ JSON error:', error?.response?.data || error?.message);
+      throw error;
+    }
+  },
+
   async logout(refresh?: string | null) {
     if (!refresh) return;
 
@@ -158,7 +218,57 @@ export const authApi = {
       throw error;
     }
   },
+
+  async googleLogin(access_token: string) {
+    try {
+      const { data } = await api.post<AuthResponse>('/auth/social/google/', {
+        access_token,
+      });
+      return data;
+    } catch (error: any) {
+      console.log(
+        'POST /auth/social/google/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
+  async forgotPassword(email: string) {
+    const { data } = await api.post('/auth/forgot-password/', { email });
+    return data;
+  },
+
+  async resetPassword(payload: {
+    email: string;
+    code: string;
+    password: string;
+    password_confirm: string;
+  }) {
+    const { data } = await api.post('/auth/reset-password/', payload);
+    return data;
+  },
+
+  async changePassword(payload: {
+    current_password: string;
+    new_password: string;
+    new_password_confirm: string;
+  }) {
+    const { data } = await api.post('/auth/change-password/', payload);
+    return data;
+  },
+
+  async sendEmailVerification() {
+    const { data } = await api.post('/auth/send-email-verification/');
+    return data;
+  },
+
+  async verifyEmail(code: string) {
+    const { data } = await api.post('/auth/verify-email/', { code });
+    return data;
+  },
 };
+
 
 // Catalog API
 export const catalogApi = {

@@ -160,9 +160,9 @@ export default function ProfileScreen() {
         <View style={styles.heroInner}>
         <View style={styles.avatarRing}>
           <View style={styles.avatar}>
-            {user?.profile_picture_url ? (
+            {user?.avatar_url ? (
               <Image
-                source={{ uri: user.profile_picture_url }}
+                source={{ uri: user.avatar_url }}
                 style={styles.avatarImage}
                 resizeMode="cover"
               />

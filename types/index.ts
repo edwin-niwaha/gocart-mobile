@@ -3,14 +3,17 @@ export type Tokens = {
   refresh: string;
 };
 
+export type UserType = 'USER' | 'ADMIN';
+
 export type User = {
   id: number;
   email: string;
   username: string;
+  is_email_verified: boolean;
   first_name?: string;
   last_name?: string;
-  profile_picture_url?: string | null;
-  user_type?: string;
+  avatar_url?: string | null;
+  user_type?: UserType;
   is_active?: boolean;
   created_at?: string;
 };
@@ -18,6 +21,31 @@ export type User = {
 export type AuthResponse = {
   user: User;
   tokens: Tokens;
+};
+
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type RegisterPayload = {
+  email: string;
+  username: string;
+  password: string;
+  password_confirm: string;
+};
+
+export type ResetPasswordPayload = {
+  email: string;
+  code: string;
+  password: string;
+  password_confirm: string;
+};
+
+export type ChangePasswordPayload = {
+  current_password: string;
+  new_password: string;
+  new_password_confirm: string;
 };
 
 export type PaginatedResponse<T> = {
@@ -54,7 +82,6 @@ export type ProductVariant = {
 };
 
 export type Product = {
-  name: any;
   id: number;
   title: string;
   slug: string;

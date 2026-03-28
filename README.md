@@ -31,6 +31,7 @@ python manage.py runserver 0.0.0.0:8000
 ```bash
 npm install
 npx expo start --clear
+npx expo run:android
 ```
 
 
