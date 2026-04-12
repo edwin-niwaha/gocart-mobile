@@ -7,6 +7,8 @@ import React, {
   useState,
 } from 'react';
 import { authApi } from '@/api/services';
+import { api } from '@/api/client';
+import { getPushToken } from '@/utils/push';
 import { clearTokens, getTokens, saveTokens } from '@/utils/storage';
 import { showError, showInfo, showSuccess } from '@/utils/toast';
 import type {
@@ -83,6 +85,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await authApi.login(payload);
       await saveTokens(response.tokens);
       setUser(response.user);
+      try {
+        const token = await getPushToken();
+        if (token) {
+          await api.post('/device-tokens/', {
+            token,
+            // platform: 'android',
+            platform: 'expo',
+          });
+        }
+      } catch (e) {
+        console.log('Push token error', e);
+      }
       showSuccess('Logged in successfully.');
     } catch (error: any) {
       showError(getApiErrorMessage(error, 'Login failed.'));
@@ -91,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, []);
+
 
   const register = useCallback(async (payload: RegisterPayload) => {
     setLoading(true);
