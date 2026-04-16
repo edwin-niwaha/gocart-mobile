@@ -22,6 +22,10 @@ function AppShell() {
           <Stack.Screen name="product/[slug]" options={{ title: 'Product' }} />
           <Stack.Screen name="checkout" options={{ title: 'Checkout' }} />
           <Stack.Screen name="notifications/index" options={{ title: 'Notifications' }} />
+          <Stack.Screen
+            name="account/notifications"
+            options={{ title: 'Email Updates' }}
+          />
       </Stack>
       <StatusBar style="dark" />
     </ShopProvider>

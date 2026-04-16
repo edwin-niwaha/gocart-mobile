@@ -13,9 +13,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack } from 'expo-router';
 
 import { Screen } from '@/components/Screen';
-import { useAuth } from '@/providers/AuthProvider';
 import { authApi } from '@/api/services';
 import { colors, spacing } from '@/constants/theme';
+import { useAuth } from '@/providers/AuthProvider';
 
 type SelectedImage = {
   uri: string;
@@ -34,16 +34,32 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!user) return;
+
     setUsername(user.username || '');
     setFirstName(user.first_name || '');
     setLastName(user.last_name || '');
   }, [user]);
 
   const avatarSource = useMemo(() => {
-    if (selectedImage?.uri) return { uri: selectedImage.uri };
-    if (user?.avatar_url) return { uri: user.avatar_url };
+    if (selectedImage?.uri) {
+      return { uri: selectedImage.uri };
+    }
+
+    if (user?.avatar_url) {
+      return { uri: user.avatar_url };
+    }
+
     return null;
   }, [selectedImage, user?.avatar_url]);
+
+  const displayName = useMemo(() => {
+    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
+    if (fullName) return fullName;
+    if (username.trim()) return username.trim();
+
+    return 'Your profile';
+  }, [firstName, lastName, username]);
 
   const hasChanges = useMemo(() => {
     if (!user) return false;
@@ -52,7 +68,7 @@ export default function ProfileScreen() {
       username !== (user.username || '') ||
       firstName !== (user.first_name || '') ||
       lastName !== (user.last_name || '') ||
-      !!selectedImage
+      Boolean(selectedImage)
     );
   }, [user, username, firstName, lastName, selectedImage]);
 
@@ -60,7 +76,7 @@ export default function ProfileScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Please allow access to your gallery.');
+      Alert.alert('Permission required', 'Please allow access to your photo library.');
       return;
     }
 
@@ -104,20 +120,18 @@ export default function ProfileScreen() {
             : `avatar-${Date.now()}.jpg`;
 
         const fileType = selectedImage.type || 'image/jpeg';
-
         const uploadUri = selectedImage.uri.startsWith('file://')
           ? selectedImage.uri
           : `file://${selectedImage.uri}`;
 
-        console.log('UPLOAD URI:', uploadUri);
-        console.log('UPLOAD NAME:', filename);
-        console.log('UPLOAD TYPE:', fileType);
-
-        formData.append('avatar', {
-          uri: uploadUri,
-          name: filename,
-          type: fileType,
-        } as any);
+        formData.append(
+          'avatar',
+          {
+            uri: uploadUri,
+            name: filename,
+            type: fileType,
+          } as any
+        );
 
         await authApi.updateProfile(formData);
       } else {
@@ -152,12 +166,12 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Profile Information' }} />
+      <Stack.Screen options={{ title: 'Profile' }} />
 
       <Screen scroll contentContainerStyle={styles.container}>
-        <View style={styles.card}>
-          <View style={styles.avatarSection}>
-            <Pressable onPress={pickImage} style={styles.avatarPill}>
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <Pressable onPress={pickImage} style={styles.avatarButton}>
               {avatarSource ? (
                 <Image source={avatarSource} style={styles.avatarImage} />
               ) : (
@@ -169,16 +183,22 @@ export default function ProfileScreen() {
               )}
             </Pressable>
 
-            <View style={styles.avatarTextWrap}>
-              <Text style={styles.avatarTitle}>Profile Photo</Text>
-              <Text style={styles.avatarSubtitle}>
-                Tap the image to upload a new profile picture.
-              </Text>
+            <View style={styles.profileText}>
+              <Text style={styles.profileName}>{displayName}</Text>
+              <Text style={styles.profileEmail}>{user?.email || 'No email address'}</Text>
+
+              <Pressable onPress={pickImage} style={styles.secondaryAction}>
+                <Text style={styles.secondaryActionText}>Change photo</Text>
+              </Pressable>
             </View>
           </View>
+        </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Username</Text>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Personal information</Text>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Username</Text>
             <TextInput
               value={username}
               onChangeText={setUsername}
@@ -189,56 +209,68 @@ export default function ProfileScreen() {
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>First Name</Text>
-            <TextInput
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder="Enter first name"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-            />
-          </View>
+          <View style={styles.inlineFields}>
+            <View style={[styles.fieldGroup, styles.flexOne]}>
+              <Text style={styles.fieldLabel}>First name</Text>
+              <TextInput
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Enter first name"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Last Name</Text>
-            <TextInput
-              value={lastName}
-              onChangeText={setLastName}
-              placeholder="Enter last name"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-            />
+            <View style={[styles.fieldGroup, styles.flexOne]}>
+              <Text style={styles.fieldLabel}>Last name</Text>
+              <TextInput
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Enter last name"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+              />
+            </View>
           </View>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.readonlyRow}>
-            <Text style={styles.readonlyLabel}>Email</Text>
-            <Text style={styles.readonlyValue}>{user?.email || '-'}</Text>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Account details</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Email</Text>
+            <Text style={styles.infoValue}>{user?.email || '-'}</Text>
           </View>
 
-          <View style={styles.rowBetween}>
-            <View>
-              <Text style={styles.readonlyLabel}>User Type</Text>
-              <Text style={styles.readonlyValue}>{user?.user_type || '-'}</Text>
-            </View>
+          <View style={styles.divider} />
 
-            <View style={styles.alignRight}>
-              <Text style={styles.readonlyLabel}>Email Verification</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>User type</Text>
+            <Text style={styles.infoValue}>{user?.user_type || '-'}</Text>
+          </View>
 
-              <View
+          <View style={styles.divider} />
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Email verification</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                user?.is_email_verified
+                  ? styles.statusBadgeSuccess
+                  : styles.statusBadgeDanger,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.badge,
+                  styles.statusBadgeText,
                   user?.is_email_verified
-                    ? styles.badgeSuccess
-                    : styles.badgeDanger,
+                    ? styles.statusBadgeTextSuccess
+                    : styles.statusBadgeTextDanger,
                 ]}
               >
-                <Text style={styles.badgeText}>
-                  {user?.is_email_verified ? 'Verified' : 'Not Verified'}
-                </Text>
-              </View>
+                {user?.is_email_verified ? 'Verified' : 'Not verified'}
+              </Text>
             </View>
           </View>
         </View>
@@ -246,15 +278,16 @@ export default function ProfileScreen() {
         <Pressable
           onPress={handleSave}
           disabled={!hasChanges || saving}
-          style={[
-            styles.saveButton,
-            (!hasChanges || saving) && styles.saveButtonDisabled,
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && hasChanges && !saving && styles.pressed,
+            (!hasChanges || saving) && styles.primaryButtonDisabled,
           ]}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Save Changes</Text>
+            <Text style={styles.primaryButtonText}>Save changes</Text>
           )}
         </Pressable>
       </Screen>
@@ -265,58 +298,44 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: spacing.md,
-    gap: spacing.md,
     paddingBottom: spacing.xl,
+    gap: spacing.md,
     backgroundColor: colors.background,
   },
 
-  heroCard: {
+  profileCard: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: 18,
   },
 
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-  },
-
-  subtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.muted,
-  },
-
-  card: {
+  sectionCard: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 16,
     gap: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
 
-  avatarSection: {
+  profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 4,
   },
 
-  avatarPill: {
+  avatarButton: {
     width: 84,
     height: 84,
     borderRadius: 999,
     overflow: 'hidden',
     backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   avatarImage: {
@@ -338,37 +357,54 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  avatarTextWrap: {
+  profileText: {
     flex: 1,
+    gap: 4,
   },
 
-  avatarTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+  profileName: {
+    fontSize: 18,
+    fontWeight: '800',
     color: colors.text,
   },
 
-  avatarSubtitle: {
-    marginTop: 4,
+  profileEmail: {
     fontSize: 13,
     lineHeight: 18,
     color: colors.muted,
   },
 
+  secondaryAction: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+
+  secondaryActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: colors.text,
   },
 
-  field: {
+  fieldGroup: {
     gap: 6,
   },
 
-  label: {
-    fontSize: 13,
+  fieldLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.muted,
   },
 
   input: {
@@ -383,23 +419,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  readonlyRow: {
-    gap: 4,
-    paddingVertical: 4,
+  inlineFields: {
+    flexDirection: 'row',
+    gap: 10,
   },
 
-  readonlyLabel: {
-    fontSize: 12,
+  flexOne: {
+    flex: 1,
+  },
+
+  infoRow: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  infoLabel: {
+    flex: 1,
+    fontSize: 13,
     color: colors.muted,
   },
 
-  readonlyValue: {
-    fontSize: 15,
+  infoValue: {
+    flex: 1,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+    textAlign: 'right',
   },
 
-  saveButton: {
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  statusBadgeSuccess: {
+    backgroundColor: '#DCFCE7',
+  },
+
+  statusBadgeDanger: {
+    backgroundColor: '#FEE2E2',
+  },
+
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  statusBadgeTextSuccess: {
+    color: '#166534',
+  },
+
+  statusBadgeTextDanger: {
+    color: '#991B1B',
+  },
+
+  primaryButton: {
     minHeight: 52,
     borderRadius: 14,
     alignItems: 'center',
@@ -407,45 +490,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary ?? colors.text,
   },
 
-  saveButtonDisabled: {
+  primaryButtonDisabled: {
     opacity: 0.6,
   },
 
-  saveButtonText: {
-    color: '#fff',
+  primaryButtonText: {
     fontSize: 15,
     fontWeight: '800',
+    color: '#fff',
   },
 
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-
-  alignRight: {
-    alignItems: 'flex-end',
-  },
-
-  badge: {
-    marginTop: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-
-  badgeSuccess: {
-    backgroundColor: '#DCFCE7',
-  },
-
-  badgeDanger: {
-    backgroundColor: '#FEE2E2',
-  },
-
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
+  pressed: {
+    opacity: 0.9,
   },
 });

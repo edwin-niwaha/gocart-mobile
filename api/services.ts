@@ -389,6 +389,49 @@ export const cartApi = {
   },
 };
 
+export const newsletterApi = {
+  async subscribe(email: string) {
+    try {
+      const { data } = await api.post('/newsletter/', { email });
+      return data;
+    } catch (error: any) {
+      console.log(
+        'POST /newsletter/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
+  async confirm(token: string) {
+    try {
+      const { data } = await api.get(
+        `/newsletter/confirm/?token=${encodeURIComponent(token)}`
+      );
+      return data;
+    } catch (error: any) {
+      console.log(
+        'GET /newsletter/confirm/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
+  async unsubscribe(email: string) {
+    try {
+      const { data } = await api.post('/newsletter/unsubscribe/', { email });
+      return data;
+    } catch (error: any) {
+      console.log(
+        'POST /newsletter/unsubscribe/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+};
+
 export const wishlistApi = {
   async ensure() {
     try {

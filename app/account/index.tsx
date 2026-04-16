@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Stack } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
 import { useAuth } from '@/providers/AuthProvider';
@@ -13,6 +13,7 @@ type SettingsRowProps = {
   subtitle?: string;
   danger?: boolean;
   onPress?: () => void;
+  loading?: boolean;
 };
 
 function SettingsRow({
@@ -22,23 +23,34 @@ function SettingsRow({
   subtitle,
   danger,
   onPress,
+  loading,
 }: SettingsRowProps) {
-  const isLinkRow = !!href;
+  const isLinkRow = Boolean(href);
 
   const content = (
     <Pressable
       onPress={onPress}
+      disabled={loading}
       android_ripple={{ color: `${colors.text}10` }}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && styles.pressed,
+        loading && styles.disabled,
+      ]}
     >
       <View style={styles.rowLeft}>
-        <View style={[styles.iconWrap, danger && styles.iconWrapDanger]}>
+        <View
+          style={[
+            styles.iconWrap,
+            danger ? styles.iconWrapDanger : styles.iconWrapNeutral,
+          ]}
+        >
           <Text style={styles.icon}>{icon}</Text>
         </View>
 
         <View style={styles.textWrap}>
           <Text
-            style={[styles.label, danger && styles.dangerText]}
+            style={[styles.rowLabel, danger && styles.dangerText]}
             numberOfLines={1}
           >
             {label}
@@ -46,7 +58,7 @@ function SettingsRow({
 
           {!!subtitle && (
             <Text
-              style={[styles.subtitle, danger && styles.dangerSubtitle]}
+              style={[styles.rowSubtitle, danger && styles.dangerSubtitle]}
               numberOfLines={2}
             >
               {subtitle}
@@ -56,10 +68,12 @@ function SettingsRow({
       </View>
 
       <View style={styles.rowRight}>
-        {isLinkRow ? (
+        {loading ? (
+          <ActivityIndicator size="small" color={danger ? colors.danger : colors.primary} />
+        ) : isLinkRow ? (
           <Text style={styles.chevron}>›</Text>
         ) : danger ? (
-          <Text style={[styles.logoutText, styles.dangerText]}>Exit</Text>
+          <Text style={[styles.actionText, styles.dangerText]}>Exit</Text>
         ) : null}
       </View>
     </Pressable>
@@ -74,7 +88,7 @@ function SettingsRow({
   );
 }
 
-function SectionTitle({
+function SectionHeader({
   title,
   subtitle,
 }: {
@@ -96,22 +110,23 @@ export default function SettingsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: '⚙️ Settings',
+          title: 'Settings',
           headerBackTitleVisible: false,
         }}
       />
 
       <Screen scroll contentContainerStyle={styles.page}>
         <View style={styles.section}>
-          <SectionTitle
+          <SectionHeader
             title="Account"
-            subtitle="Personal information and saved details"
+            subtitle="Personal details and saved information"
           />
+
           <View style={styles.card}>
             <SettingsRow
               icon="👤"
-              label="Profile Information"
-              subtitle="View and manage your personal profile details"
+              label="Profile"
+              subtitle="View and update your personal details"
               href="/account/profile"
             />
             <SettingsRow
@@ -123,23 +138,24 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="📬"
               label="Notifications"
-              subtitle="Control alerts, updates, and account messages"
-              href="/notifications"
+              subtitle="Manage email updates, offers, and alerts"
+              href="/account/notifications"
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <SectionTitle
+          <SectionHeader
             title="Security"
-            subtitle="Protect your account and sign-in options"
+            subtitle="Sign-in, password, and email verification"
           />
+
           <View style={styles.card}>
             {!user?.is_email_verified && (
               <SettingsRow
                 icon="📧"
                 label="Verify Email"
-                subtitle="Confirm your email address for better security"
+                subtitle="Confirm your email address for added account security"
                 href="/auth/verify-email"
               />
             )}
@@ -161,10 +177,11 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionTitle
+          <SectionHeader
             title="Support"
-            subtitle="Help resources, legal information, and assistance"
+            subtitle="Get help and review important information"
           />
+
           <View style={styles.card}>
             <SettingsRow
               icon="❓"
@@ -175,24 +192,26 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="📄"
               label="Terms & Privacy"
-              subtitle="Read our terms of service and privacy policy"
+              subtitle="Review our terms of service and privacy policy"
               href="/legal"
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <SectionTitle
+          <SectionHeader
             title="Session"
             subtitle="Manage your current signed-in session"
           />
+
           <View style={styles.card}>
             <SettingsRow
               icon="🚪"
-              label={loading ? 'Signing out…' : 'Logout'}
+              label={loading ? 'Signing out...' : 'Logout'}
               subtitle="Securely sign out from this device"
               onPress={logout}
               danger
+              loading={loading}
             />
           </View>
         </View>
@@ -209,6 +228,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
 
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    gap: 6,
+  },
+
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.text,
+  },
+
+  heroSubtitle: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+
   section: {
     gap: 10,
   },
@@ -219,7 +259,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     color: colors.text,
     textTransform: 'uppercase',
@@ -237,17 +277,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 6,
+    padding: 8,
     gap: 8,
   },
 
   row: {
-    minHeight: 78,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 16,
     backgroundColor: colors.background,
     gap: 12,
@@ -269,13 +309,16 @@ const styles = StyleSheet.create({
   },
 
   iconWrap: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 14,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+
+  iconWrapNeutral: {
+    backgroundColor: colors.surface,
   },
 
   iconWrapDanger: {
@@ -289,19 +332,19 @@ const styles = StyleSheet.create({
   textWrap: {
     flex: 1,
     minWidth: 0,
+    gap: 3,
   },
 
-  label: {
+  rowLabel: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
   },
 
-  subtitle: {
+  rowSubtitle: {
     fontSize: 12,
-    color: colors.muted,
-    marginTop: 4,
     lineHeight: 18,
+    color: colors.muted,
   },
 
   chevron: {
@@ -311,13 +354,17 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  logoutText: {
+  actionText: {
     fontSize: 12,
     fontWeight: '700',
   },
 
   pressed: {
-    opacity: 0.82,
+    opacity: 0.84,
+  },
+
+  disabled: {
+    opacity: 0.65,
   },
 
   dangerText: {
@@ -326,6 +373,6 @@ const styles = StyleSheet.create({
 
   dangerSubtitle: {
     color: colors.danger,
-    opacity: 0.85,
+    opacity: 0.88,
   },
 });

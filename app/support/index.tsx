@@ -56,7 +56,7 @@ export default function SupportScreen() {
 
   const handleOpenMap = async () => {
     const url =
-      'https://www.google.com/maps/search/?api=1&query=Perpetual+Tech+Kampala+Uganda';
+      'https://www.google.com/maps/search/?api=1&query=Perpetual+Labs+Kampala+Uganda';
     const supported = await Linking.canOpenURL(url);
     if (supported) {
       await Linking.openURL(url);
@@ -297,7 +297,7 @@ export default function SupportScreen() {
           </Text>
 
           <Pressable style={styles.mapCard} onPress={handleOpenMap}>
-            <Text style={styles.mapCardTitle}>Perpetual Tech</Text>
+            <Text style={styles.mapCardTitle}>Perpetual Labs</Text>
             <Text style={styles.mapCardText}>Kampala, Uganda</Text>
             <Text style={styles.mapCardLink}>Tap to open in Google Maps</Text>
           </Pressable>
