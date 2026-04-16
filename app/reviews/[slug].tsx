@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import { catalogApi, getErrorMessage, reviewApi } from '@/api/services';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
+import { useAuth } from '@/providers/AuthProvider';
 import type { Product, Review } from '@/types';
 
 function normalizeNumber(value: unknown, fallback = 0) {
@@ -69,9 +71,10 @@ function getDisplayName(review: Review) {
 
 export default function ProductReviewsScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [myReview, setMyReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -83,24 +86,43 @@ export default function ProductReviewsScreen() {
         setLoading(true);
       }
 
-      const [productData, reviewsData] = await Promise.all([
-        catalogApi.product(String(slug)),
-        reviewApi.listByProduct({ product_slug: String(slug) }),
-      ]);
+      if (isAuthenticated) {
+        const [productData, reviewsData, myReviewData] = await Promise.all([
+          catalogApi.product(String(slug)),
+          reviewApi.listByProduct({ product_slug: String(slug) }),
+          reviewApi.myReviewForProduct(String(slug)),
+        ]);
 
-      setProduct(productData);
-      setReviews(reviewsData);
+        setProduct(productData);
+        setReviews(reviewsData);
+        setMyReview(myReviewData);
+      } else {
+        const [productData, reviewsData] = await Promise.all([
+          catalogApi.product(String(slug)),
+          reviewApi.listByProduct({ product_slug: String(slug) }),
+        ]);
+
+        setProduct(productData);
+        setReviews(reviewsData);
+        setMyReview(null);
+      }
     } catch (error: any) {
       Alert.alert('Error', getErrorMessage(error, 'Could not load reviews.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [slug]);
+  }, [slug, isAuthenticated]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const averageRating = useMemo(
     () => normalizeNumber(product?.average_rating, 0),
@@ -149,6 +171,17 @@ export default function ProductReviewsScreen() {
                 <Text style={styles.productTitle}>{product.title}</Text>
               )}
               <Text style={styles.sectionLabel}>Customer reviews</Text>
+
+              {isAuthenticated ? (
+                <Pressable
+                  onPress={() => router.push(`/reviews/write/${slug}`)}
+                  style={styles.writeButton}
+                >
+                  <Text style={styles.writeButtonText}>
+                    {myReview ? 'Edit my review' : 'Write review'}
+                  </Text>
+                </Pressable>
+              ) : null}
 
               <View style={styles.summaryTop}>
                 <View>
@@ -250,6 +283,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
     fontWeight: '600',
+  },
+
+  writeButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+
+  writeButtonText: {
+    color: colors.surface,
+    fontSize: 14,
+    fontWeight: '800',
   },
 
   summaryTop: {

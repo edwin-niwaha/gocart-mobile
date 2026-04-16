@@ -9,6 +9,13 @@ export default function ReviewsLayout() {
           headerShown: false,
         }}
       />
+
+      <Stack.Screen
+        name="write/[slug]"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

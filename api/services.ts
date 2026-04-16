@@ -558,7 +558,6 @@ export const notificationApi = {
   },
 };
 
-// Reviews & Ratings API
 export const reviewApi = {
   async listMine(params?: { product?: number; product_slug?: string }) {
     try {
@@ -619,6 +618,20 @@ export const reviewApi = {
       await api.delete(`/reviews/${id}/`);
     } catch (error: any) {
       console.log(`DELETE /reviews/${id}/ error:`, error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async myReviewForProduct(product_slug: string) {
+    try {
+      const { data } = await api.get<Review[] | { results: Review[] }>('/reviews/', {
+        params: { product_slug },
+      });
+
+      const reviews = normalizeList(data);
+      return reviews[0] ?? null;
+    } catch (error: any) {
+      console.log('GET /reviews/ myReviewForProduct error:', error?.response?.data || error.message);
       throw error;
     }
   },
