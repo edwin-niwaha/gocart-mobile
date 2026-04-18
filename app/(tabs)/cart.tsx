@@ -7,12 +7,12 @@ import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
-import { useAuth } from '@/providers/AuthProvider'; // adjust to your auth hook
+import { useAuth } from '@/providers/AuthProvider';
 import { money } from '@/utils/format';
 
 export default function CartScreen() {
   const { cartItems, loadAuthedData, updateCartQty, removeCartItem } = useShop();
-  const { user, isAuthenticated } = useAuth(); // adjust names to your auth provider
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -41,15 +41,24 @@ export default function CartScreen() {
           />
         ) : null}
 
-        {cartItems.map((item) => (
-          <CartRow
-            key={item.id}
-            item={item}
-            onMinus={() => updateCartQty(item.id, item.quantity - 1)}
-            onPlus={() => updateCartQty(item.id, item.quantity + 1)}
-            onRemove={() => removeCartItem(item.id)}
-          />
-        ))}
+        {cartItems.map((item) => {
+          const canDecrease = item.quantity > 1;
+
+          return (
+            <CartRow
+              key={item.id}
+              item={item}
+              canDecrease={canDecrease}
+              onMinus={
+                canDecrease
+                  ? () => updateCartQty(item.id, item.quantity - 1)
+                  : undefined
+              }
+              onPlus={() => updateCartQty(item.id, item.quantity + 1)}
+              onRemove={() => removeCartItem(item.id)}
+            />
+          );
+        })}
 
         {!!cartItems.length && (
           <View style={styles.summary}>

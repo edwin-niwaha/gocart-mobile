@@ -17,6 +17,7 @@ export function CartRow({
 }) {
   const unitPrice = Number(item.unit_price ?? item.variant?.price ?? 0);
   const lineTotal = Number(item.line_total ?? unitPrice * item.quantity);
+  const disableMinus = item.quantity <= 1;
 
   return (
     <View style={styles.card}>
@@ -32,8 +33,17 @@ export function CartRow({
 
       <View style={styles.right}>
         <View style={styles.actions}>
-          <Pressable onPress={onMinus} style={styles.qtyButton}>
-            <Text>-</Text>
+          <Pressable
+            onPress={onMinus}
+            disabled={disableMinus}
+            style={[
+              styles.qtyButton,
+              disableMinus && styles.qtyButtonDisabled,
+            ]}
+          >
+            <Text style={disableMinus ? styles.qtyButtonTextDisabled : undefined}>
+              -
+            </Text>
           </Pressable>
 
           <Text style={styles.qty}>{item.quantity}</Text>
@@ -106,6 +116,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+
+  qtyButtonDisabled: {
+    opacity: 0.4,
+  },
+
+  qtyButtonTextDisabled: {
+    color: colors.muted,
   },
 
   qty: {
