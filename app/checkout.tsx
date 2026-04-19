@@ -696,67 +696,93 @@ export default function CheckoutScreen() {
     }
   };
 
-  return (
-    <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
-      <AuthGate message="Please log in before placing an order.">
-        <View style={styles.container}>
-          <View style={styles.card}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.title}>Delivery address</Text>
-              <Pressable onPress={openAddAddress} style={styles.linkBtn}>
-                <Text style={styles.linkBtnText}>+ Add new</Text>
-              </Pressable>
-            </View>
-
-            {!addresses.length ? (
-              <EmptyState
-                title="No address yet"
-                subtitle="Add a delivery address to continue with checkout."
-              />
-            ) : (
-              <View style={styles.addressList}>
-                {addresses.map((item) => (
-                  <AddressOption
-                    key={item.id}
-                    item={item}
-                    selected={item.id === selectedAddressId}
-                    expanded={item.id === expandedAddressId}
-                    onSelect={() => onSelectAddress(item)}
-                    onToggleExpand={() => onToggleAddressExpand(item.id)}
-                  />
-                ))}
-
-                {!!selectedAddress && !selectedAddress.is_default && (
-                  <Pressable
-                    onPress={onMakeDefaultAddress}
-                    style={styles.secondaryButton}
-                  >
-                    <Text style={styles.secondaryButtonText}>
-                      Make selected address default
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
+return (
+  <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
+    <AuthGate message="Please log in before placing an order.">
+      <View style={styles.container}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroIcon}>
+            <Text style={styles.heroIconText}>✓</Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.title}>Payment method</Text>
-            <View style={styles.divider} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eyebrow}>CHECKOUT</Text>
+            <Text style={styles.heroTitle}>Complete your order</Text>
+            <Text style={styles.heroSubtitle}>
+              Choose your delivery address, select a payment method, and review
+              everything before placing your order.
+            </Text>
+          </View>
+        </View>
 
-            {cashOption ? (
-              <Pressable
-                onPress={() => setPaymentProvider(cashOption.value)}
-                style={[
-                  styles.cashPaymentOption,
-                  paymentProvider === cashOption.value &&
-                    styles.paymentOptionSelected,
-                ]}
-              >
-                <View style={styles.paymentRadio}>
-                  {paymentProvider === cashOption.value && (
-                    <View style={styles.paymentRadioInner} />
-                  )}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.eyebrow}>DELIVERY</Text>
+              <Text style={styles.title}>Choose address</Text>
+              <Text style={styles.sectionSubtitle}>
+                Pick where your order should be delivered.
+              </Text>
+            </View>
+
+            <Pressable onPress={openAddAddress} style={styles.linkPill}>
+              <Text style={styles.linkPillText}>+ Add new</Text>
+            </Pressable>
+          </View>
+
+          {!addresses.length ? (
+            <EmptyState
+              title="No address yet"
+              subtitle="Add a delivery address to continue with checkout."
+            />
+          ) : (
+            <View style={styles.addressList}>
+              {addresses.map((item) => (
+                <AddressOption
+                  key={item.id}
+                  item={item}
+                  selected={item.id === selectedAddressId}
+                  expanded={item.id === expandedAddressId}
+                  onSelect={() => onSelectAddress(item)}
+                  onToggleExpand={() => onToggleAddressExpand(item.id)}
+                />
+              ))}
+
+              {!!selectedAddress && !selectedAddress.is_default && (
+                <Pressable
+                  onPress={onMakeDefaultAddress}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Make selected address default
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionTitleBlock}>
+            <Text style={styles.eyebrow}>PAYMENT</Text>
+            <Text style={styles.title}>Choose how to pay</Text>
+            <Text style={styles.sectionSubtitle}>
+              Select your preferred payment option.
+            </Text>
+          </View>
+
+          {cashOption ? (
+            <Pressable
+              onPress={() => setPaymentProvider(cashOption.value)}
+              style={[
+                styles.paymentOptionCard,
+                paymentProvider === cashOption.value &&
+                  styles.paymentOptionCardSelected,
+              ]}
+            >
+              <View style={styles.paymentOptionLeft}>
+                <View style={styles.paymentIconCircle}>
+                  <Text style={styles.paymentIconText}>₵</Text>
                 </View>
 
                 <View style={{ flex: 1 }}>
@@ -769,108 +795,145 @@ export default function CheckoutScreen() {
                   >
                     {cashOption.label}
                   </Text>
-                  <Text style={styles.paymentSubtitle}>
-                    {cashOption.subtitle}
-                  </Text>
+                  <Text style={styles.paymentSubtitle}>{cashOption.subtitle}</Text>
                 </View>
-              </Pressable>
-            ) : null}
-
-            <View style={styles.iconPaymentRow}>
-              {mobileMoneyOptions.map((option) => {
-                const selected = paymentProvider === option.value;
-                const icon =
-                  option.value === 'MTN'
-                    ? PAYMENT_ICONS.MTN
-                    : PAYMENT_ICONS.AIRTEL;
-                const disabled = option.value === 'AIRTEL';
-
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => {
-                      if (disabled) {
-                        showInfo('Airtel Money is coming soon.');
-                        return;
-                      }
-                      setPaymentProvider(option.value);
-                    }}
-                    style={[
-                      styles.iconPaymentCard,
-                      selected && styles.iconPaymentCardSelected,
-                      disabled && styles.disabledPaymentCard,
-                    ]}
-                  >
-                    <View style={styles.iconPaymentTop}>
-                      <Image
-                        source={icon}
-                        style={styles.smallPaymentIcon}
-                        resizeMode="contain"
-                      />
-
-                      <View style={styles.paymentRadio}>
-                        {selected && <View style={styles.paymentRadioInner} />}
-                      </View>
-                    </View>
-
-                    {disabled ? (
-                      <Text style={styles.comingSoonText}>Coming soon</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {paymentProvider === 'MTN' ? (
-              <View style={styles.mtnPhoneWrap}>
-                <Text style={styles.sectionLabel}>MTN phone number</Text>
-                <TextInput
-                  placeholder="078XXXXXXX or +25678XXXXXXX"
-                  placeholderTextColor={colors.muted}
-                  value={mtnPhone}
-                  onChangeText={setMtnPhone}
-                  keyboardType="phone-pad"
-                  style={styles.input}
-                  editable={!isBusy}
-                />
-                <Text style={styles.helperText}>
-                  Use the number that will receive and approve the MTN prompt.
-                </Text>
               </View>
-            ) : null}
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.title}>Order summary</Text>
-            <View style={styles.divider} />
+              <View style={styles.paymentRadio}>
+                {paymentProvider === cashOption.value && (
+                  <View style={styles.paymentRadioInner} />
+                )}
+              </View>
+            </Pressable>
+          ) : null}
 
-            {cartItems.map((item) => {
-              const itemTotal =
-                item.line_total ?? Number(item.variant?.price || 0) * item.quantity;
+          <View style={styles.iconPaymentRow}>
+            {mobileMoneyOptions.map((option) => {
+              const selected = paymentProvider === option.value;
+              const icon =
+                option.value === 'MTN'
+                  ? PAYMENT_ICONS.MTN
+                  : PAYMENT_ICONS.AIRTEL;
+              const disabled = option.value === 'AIRTEL';
 
               return (
-                <View key={item.id} style={styles.row}>
-                  <View style={styles.itemInfo}>
-                    <Text numberOfLines={2} style={styles.itemText}>
-                      {item.product.title}
-                    </Text>
-                    <Text style={styles.itemMeta}>
-                      Qty {item.quantity}
-                      {item.variant?.name ? ` • ${item.variant.name}` : ''}
-                    </Text>
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    if (disabled) {
+                      showInfo('Airtel Money is coming soon.');
+                      return;
+                    }
+                    setPaymentProvider(option.value);
+                  }}
+                  style={[
+                    styles.iconPaymentCard,
+                    selected && styles.iconPaymentCardSelected,
+                    disabled && styles.disabledPaymentCard,
+                  ]}
+                >
+                  <View style={styles.iconPaymentTop}>
+                    <Image
+                      source={icon}
+                      style={styles.smallPaymentIcon}
+                      resizeMode="contain"
+                    />
+
+                    <View style={styles.paymentRadio}>
+                      {selected && <View style={styles.paymentRadioInner} />}
+                    </View>
                   </View>
 
-                  <Text style={styles.price}>{money(itemTotal)}</Text>
-                </View>
+                  <Text
+                    style={[
+                      styles.iconPaymentLabel,
+                      selected && styles.iconPaymentLabelSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+
+                  <Text style={styles.paymentSubtitle}>{option.subtitle}</Text>
+
+                  {disabled ? (
+                    <Text style={styles.comingSoonBadge}>Coming soon</Text>
+                  ) : null}
+                </Pressable>
               );
             })}
+          </View>
 
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{money(total)}</Text>
+          {paymentProvider === 'MTN' ? (
+            <View style={styles.mtnPhoneCard}>
+              <Text style={styles.sectionLabel}>MTN Mobile Money number</Text>
+              <TextInput
+                placeholder="078XXXXXXX or +25678XXXXXXX"
+                placeholderTextColor={colors.muted}
+                value={mtnPhone}
+                onChangeText={setMtnPhone}
+                keyboardType="phone-pad"
+                style={styles.input}
+                editable={!isBusy}
+              />
+              <Text style={styles.helperText}>
+                Use the number that will receive and approve the MTN payment
+                prompt.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionTitleBlock}>
+            <Text style={styles.eyebrow}>REVIEW</Text>
+            <Text style={styles.title}>Order summary</Text>
+            <Text style={styles.sectionSubtitle}>
+              Confirm your items and total before placing the order.
+            </Text>
+          </View>
+
+          {cartItems.map((item) => {
+            const itemTotal =
+              item.line_total ?? Number(item.variant?.price || 0) * item.quantity;
+
+            return (
+              <View key={item.id} style={styles.summaryItemCard}>
+                <View style={styles.itemInfo}>
+                  <Text numberOfLines={2} style={styles.itemText}>
+                    {item.product.title}
+                  </Text>
+                  <Text style={styles.itemMeta}>
+                    Qty {item.quantity}
+                    {item.variant?.name ? ` • ${item.variant.name}` : ''}
+                  </Text>
+                </View>
+
+                <Text style={styles.price}>{money(itemTotal)}</Text>
+              </View>
+            );
+          })}
+
+          <View style={styles.summaryMeta}>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Delivery</Text>
+              <Text style={styles.metaValue}>
+                {selectedAddress?.city || 'Not selected'}
+              </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Payment</Text>
+              <Text style={styles.metaValue}>{paymentProvider}</Text>
             </View>
           </View>
 
+          <View style={styles.totalBox}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>{money(total)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.ctaCard}>
           <Pressable
             style={[
               styles.button,
@@ -890,23 +953,79 @@ export default function CheckoutScreen() {
             </Text>
           </Pressable>
         </View>
+      </View>
 
-        <AddressFormModal
-          visible={addressModalVisible}
-          loading={savingAddress}
-          initialValues={EMPTY_FORM}
-          onClose={closeAddAddress}
-          onSubmit={submitNewAddress}
-        />
-      </AuthGate>
-    </Screen>
-  );
+      <AddressFormModal
+        visible={addressModalVisible}
+        loading={savingAddress}
+        initialValues={EMPTY_FORM}
+        onClose={closeAddAddress}
+        onSubmit={submitNewAddress}
+      />
+    </AuthGate>
+  </Screen>
+);
 }
 
 const styles = StyleSheet.create({
   container: {
     gap: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl + 20,
+    backgroundColor: '#F8FAFC',
+  },
+
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: spacing.lg,
+    flexDirection: 'row',
+    gap: spacing.md,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+
+  heroIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+
+  heroIconText: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.muted,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.text,
+  },
+
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.muted,
   },
 
   card: {
@@ -920,36 +1039,58 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    elevation: 2,
+  },
+
+  ctaCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
 
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
 
+  sectionTitleBlock: {
+    gap: 4,
+  },
+
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
     color: colors.text,
   },
 
-  linkBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+  sectionSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.muted,
   },
 
-  linkBtnText: {
-    color: colors.primary,
+  linkPill: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  linkPillText: {
+    color: colors.text,
     fontSize: 13,
     fontWeight: '800',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
   },
 
   addressList: {
@@ -959,10 +1100,10 @@ const styles = StyleSheet.create({
   addressCard: {
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
-    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     padding: spacing.md,
-    gap: 6,
+    gap: 8,
   },
 
   addressCardSelected: {
@@ -973,7 +1114,7 @@ const styles = StyleSheet.create({
   addressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
 
@@ -993,7 +1134,7 @@ const styles = StyleSheet.create({
   },
 
   defaultBadge: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1013,7 +1154,7 @@ const styles = StyleSheet.create({
   },
 
   selectedBadgeText: {
-    color: colors.surface,
+    color: '#fff',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -1024,7 +1165,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1039,10 +1180,14 @@ const styles = StyleSheet.create({
   addressDetails: {
     gap: 4,
     marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
   },
 
   cardText: {
     fontSize: 14,
+    lineHeight: 20,
     color: colors.text,
   },
 
@@ -1051,10 +1196,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
 
   secondaryButtonText: {
@@ -1063,20 +1208,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  cashPaymentOption: {
+  paymentOptionCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
-    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     padding: spacing.md,
   },
 
-  paymentOptionSelected: {
+  paymentOptionCardSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
+  },
+
+  paymentOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+
+  paymentIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  paymentIconText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.primary,
   },
 
   paymentRadio: {
@@ -1108,7 +1276,8 @@ const styles = StyleSheet.create({
 
   paymentSubtitle: {
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 18,
     color: colors.muted,
   },
 
@@ -1121,12 +1290,12 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minHeight: 56,
-    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    minHeight: 118,
+    justifyContent: 'space-between',
   },
 
   iconPaymentCardSelected: {
@@ -1135,7 +1304,7 @@ const styles = StyleSheet.create({
   },
 
   disabledPaymentCard: {
-    opacity: 0.7,
+    opacity: 0.65,
   },
 
   iconPaymentTop: {
@@ -1149,15 +1318,36 @@ const styles = StyleSheet.create({
     height: 28,
   },
 
-  comingSoonText: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '700',
+  iconPaymentLabel: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  iconPaymentLabelSelected: {
+    color: colors.primary,
+  },
+
+  comingSoonBadge: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '800',
     color: colors.muted,
   },
 
-  mtnPhoneWrap: {
+  mtnPhoneCard: {
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 18,
+    padding: spacing.md,
   },
 
   sectionLabel: {
@@ -1168,17 +1358,17 @@ const styles = StyleSheet.create({
 
   helperText: {
     fontSize: 12,
-    color: colors.muted,
     lineHeight: 18,
+    color: colors.muted,
   },
 
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     fontSize: 14,
     color: colors.text,
   },
@@ -1249,7 +1439,7 @@ const styles = StyleSheet.create({
   },
 
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
     color: colors.text,
   },
@@ -1266,14 +1456,14 @@ const styles = StyleSheet.create({
 
   actionBtn: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   cancelBtn: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -1292,6 +1482,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '800',
+  },
+
+  summaryItemCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: spacing.md,
   },
 
   row: {
@@ -1323,14 +1525,41 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
+  summaryMeta: {
+    marginTop: 4,
+    gap: 10,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  metaLabel: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+
+  metaValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+    textAlign: 'right',
+  },
+
+  totalBox: {
+    marginTop: 6,
+    borderRadius: 18,
+    backgroundColor: '#F0FDF4',
+    padding: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 
   totalLabel: {
@@ -1340,15 +1569,15 @@ const styles = StyleSheet.create({
   },
 
   totalValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
     color: colors.primary,
   },
 
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 18,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
