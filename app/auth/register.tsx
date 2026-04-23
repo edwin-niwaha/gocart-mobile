@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -102,7 +102,7 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const routeAuthenticatedUser = (signedInUser: NonNullable<typeof user>) => {
+  const routeAuthenticatedUser = useCallback((signedInUser: NonNullable<typeof user>) => {
     if (signedInUser.user_type === 'ADMIN') {
       router.replace('/');
       return;
@@ -114,7 +114,7 @@ export default function RegisterScreen() {
     }
 
     router.replace('/(tabs)');
-  };
+  }, []);
 
   const { googleLoading, startGoogleAuth } = useGoogleAuth({
     onErrorTitle: 'Google sign up failed',
@@ -126,7 +126,7 @@ export default function RegisterScreen() {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
     routeAuthenticatedUser(user);
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, routeAuthenticatedUser, user]);
 
   const updateField = <K extends keyof RegisterForm>(
     key: K,
@@ -187,7 +187,6 @@ export default function RegisterScreen() {
       <Stack.Screen
         options={{
           title: 'Register',
-          headerBackTitleVisible: false,
         }}
       />
 

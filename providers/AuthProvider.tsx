@@ -6,7 +6,8 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { authApi } from '@/api/services';
+import { authApi, getErrorMessage } from '@/api/services';
+import { logError } from '@/utils/logger';
 import { api } from '@/api/client';
 import { getPushToken } from '@/utils/push';
 import { clearTokens, getTokens, saveTokens } from '@/utils/storage';
@@ -39,26 +40,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
-  const data = error?.response?.data;
-
-  if (typeof data === 'string') return data;
-  if (Array.isArray(data) && data.length) return String(data[0]);
-  if (data?.detail) return String(data.detail);
-  if (data?.message) return String(data.message);
-  if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
-
-  if (data?.email?.[0]) return String(data.email[0]);
-  if (data?.username?.[0]) return String(data.username[0]);
-  if (data?.password?.[0]) return String(data.password[0]);
-  if (data?.password_confirm?.[0]) return String(data.password_confirm[0]);
-  if (data?.code?.[0]) return String(data.code[0]);
-
-  if (typeof error?.message === 'string') return error.message;
-
-  return fallback;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
@@ -87,19 +68,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(response.user);
       try {
         const token = await getPushToken();
-        if (token) {
+        if (token?.token && (token.platform === 'android' || token.platform === 'ios')) {
           await api.post('/device-tokens/', {
-            token,
-            // platform: 'android',
-            platform: 'expo',
+            token: token.token,
+            platform: token.platform,
           });
         }
       } catch (e) {
-        console.log('Push token error', e);
+        logError('Push token registration failed.', e);
       }
       showSuccess('Logged in successfully.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Login failed.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Login failed.'));
       throw error;
     } finally {
       setLoading(false);
@@ -114,8 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await saveTokens(response.tokens);
       setUser(response.user);
       showSuccess('Account created successfully.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Registration failed.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Registration failed.'));
       throw error;
     } finally {
       setLoading(false);
@@ -130,8 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(response.user);
       showSuccess('Signed in with Google successfully.');
       return response.user;
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Google sign-in failed.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Google sign-in failed.'));
       throw error;
     } finally {
       setLoading(false);
@@ -157,8 +137,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.forgotPassword(email);
       showSuccess('Password reset instructions sent to your email.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Failed to send reset email.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Failed to send reset email.'));
       throw error;
     } finally {
       setLoading(false);
@@ -170,8 +150,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.resetPassword(payload);
       showSuccess('Password reset successfully.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Password reset failed.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Password reset failed.'));
       throw error;
     } finally {
       setLoading(false);
@@ -183,8 +163,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.changePassword(payload);
       showSuccess('Password changed successfully.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Failed to change password.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Failed to change password.'));
       throw error;
     } finally {
       setLoading(false);
@@ -196,8 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.sendEmailVerification();
       showSuccess('Verification email sent.');
-    } catch (error: any) {
-      showError(getApiErrorMessage(error, 'Failed to send verification email.'));
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Failed to send verification email.'));
       throw error;
     } finally {
       setLoading(false);
@@ -217,8 +197,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         showSuccess('Email verified successfully.');
-      } catch (error: any) {
-        showError(getApiErrorMessage(error, 'Email verification failed.'));
+      } catch (error: unknown) {
+        showError(getErrorMessage(error, 'Email verification failed.'));
         throw error;
       } finally {
         setLoading(false);

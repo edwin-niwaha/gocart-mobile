@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthGate } from '@/components/AuthGate';
 import { CartRow } from '@/components/CartRow';
 import { EmptyState } from '@/components/EmptyState';
@@ -11,7 +11,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { money } from '@/utils/format';
 
 export default function CartScreen() {
-  const { cartItems, loadAuthedData, updateCartQty, removeCartItem } = useShop();
+  const { cartItems, loadAuthedData, updateCartQty, removeCartItem, loading } = useShop();
   const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -34,7 +34,12 @@ export default function CartScreen() {
   return (
     <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
       <AuthGate message="Log in to view your cart and place orders.">
-        {!cartItems.length ? (
+        {loading && !cartItems.length ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading your cart...</Text>
+          </View>
+        ) : !cartItems.length ? (
           <EmptyState
             title="Your cart is empty"
             subtitle="Add products from the shop to start checkout."
@@ -48,12 +53,11 @@ export default function CartScreen() {
             <CartRow
               key={item.id}
               item={item}
-              canDecrease={canDecrease}
-              onMinus={
-                canDecrease
-                  ? () => updateCartQty(item.id, item.quantity - 1)
-                  : undefined
-              }
+              onMinus={() => {
+                if (canDecrease) {
+                  updateCartQty(item.id, item.quantity - 1);
+                }
+              }}
               onPlus={() => updateCartQty(item.id, item.quantity + 1)}
               onRemove={() => removeCartItem(item.id)}
             />
@@ -104,5 +108,18 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: '800',
+  },
+  loadingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  loadingText: {
+    color: colors.muted,
+    fontWeight: '700',
   },
 });

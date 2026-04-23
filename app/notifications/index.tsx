@@ -15,6 +15,8 @@ import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import type { Notification } from '@/types';
 
+const EMPTY_MARKING_IDS: number[] = [];
+
 export default function NotificationsScreen() {
   const shop = useShop();
 
@@ -30,7 +32,7 @@ export default function NotificationsScreen() {
 
   const markNotificationRead = shop.markNotificationRead;
   const markAllNotificationsRead = shop.markAllNotificationsRead;
-  const markingNotificationIds = shop.markingNotificationIds ?? [];
+  const markingNotificationIds = shop.markingNotificationIds ?? EMPTY_MARKING_IDS;
   const markingAllNotifications = shop.markingAllNotifications ?? false;
 
   useEffect(() => {

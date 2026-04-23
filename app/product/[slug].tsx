@@ -82,7 +82,7 @@ function getStatusTone(isOutOfStock: boolean) {
       };
 }
 
-function dedupeImageUrls(urls: Array<string | null | undefined>) {
+function dedupeImageUrls(urls: (string | null | undefined)[]) {
   const seen = new Set<string>();
   const result: string[] = [];
 

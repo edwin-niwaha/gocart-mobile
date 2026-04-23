@@ -4,8 +4,10 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
 
+import { getErrorMessage } from '@/api/services';
 import { useAuth } from '@/providers/AuthProvider';
 import { useShop } from '@/providers/ShopProvider';
+import { logError } from '@/utils/logger';
 import type { User } from '@/types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -23,6 +25,10 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
 
   const errorTitle = options?.onErrorTitle || 'Google login failed';
   const onSuccess = options?.onSuccess;
+  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const hasGoogleClientIds = Boolean(androidClientId || iosClientId || webClientId);
 
   const redirectUri = useMemo(
     () =>
@@ -33,34 +39,20 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
   );
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    androidClientId,
+    iosClientId,
+    webClientId,
     redirectUri,
     scopes: ['openid', 'profile', 'email'],
   });
 
   useEffect(() => {
-    console.log('Google Auth Config');
-    console.log('redirectUri:', redirectUri);
-    console.log(
-      'androidClientId:',
-      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-    );
-    console.log('iosClientId:', process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
-    console.log('webClientId:', process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
-    console.log('request ready:', !!request);
-  }, [redirectUri, request]);
-
-  useEffect(() => {
-    console.log('Google response:', JSON.stringify(response, null, 2));
-
     const handleGoogleResponse = async () => {
       if (!response) return;
 
       if (response.type !== 'success') {
         if (response.type === 'error') {
-          console.log('Google auth error response:', response.error);
+          logError('Google auth provider returned an error.', response.error);
           Alert.alert(
             errorTitle,
             response.error?.message || 'Google authentication failed.'
@@ -74,7 +66,6 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
         setGoogleLoading(true);
 
         const accessToken = response.authentication?.accessToken;
-        console.log('Google accessToken exists:', !!accessToken);
 
         if (!accessToken) {
           Alert.alert(errorTitle, 'Missing Google access token.');
@@ -82,25 +73,18 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
         }
 
         const signedInUser = await googleLogin(accessToken);
-        console.log('Backend googleLogin success:', signedInUser);
 
         await loadAuthedData();
 
         if (onSuccess) {
           await onSuccess(signedInUser);
         }
-      } catch (error: any) {
-        console.log(
-          'Google login backend error:',
-          error?.response?.data || error?.message || error
+      } catch (error: unknown) {
+        logError('Google login failed after provider success.', error);
+        Alert.alert(
+          errorTitle,
+          getErrorMessage(error, 'Unable to complete Google authentication.')
         );
-
-        const message =
-          error?.response?.data?.detail ||
-          error?.message ||
-          'Unable to complete Google authentication.';
-
-        Alert.alert(errorTitle, message);
       } finally {
         setGoogleLoading(false);
       }
@@ -111,6 +95,14 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
 
   const startGoogleAuth = async () => {
     try {
+      if (!hasGoogleClientIds) {
+        Alert.alert(
+          errorTitle,
+          'Google sign-in is not configured for this build.'
+        );
+        return;
+      }
+
       if (!request) {
         Alert.alert(
           errorTitle,
@@ -119,34 +111,23 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
         return;
       }
 
-      console.log('Starting Google auth...');
-      console.log('Using redirectUri:', redirectUri);
-
       setGoogleLoading(true);
-      const result = await promptAsync();
-
-      console.log('promptAsync result:', JSON.stringify(result, null, 2));
-    } catch (error: any) {
+      await promptAsync();
+    } catch (error: unknown) {
       setGoogleLoading(false);
 
-      console.log(
-        'promptAsync error:',
-        error?.response?.data || error?.message || error
+      logError('Google auth prompt failed.', error);
+      Alert.alert(
+        errorTitle,
+        getErrorMessage(error, 'Unable to start Google authentication.')
       );
-
-      const message =
-        error?.response?.data?.detail ||
-        error?.message ||
-        'Unable to start Google authentication.';
-
-      Alert.alert(errorTitle, message);
     }
   };
 
   return {
     googleLoading,
     startGoogleAuth,
-    googleReady: !!request,
+    googleReady: hasGoogleClientIds && !!request,
     redirectUri,
   };
 }

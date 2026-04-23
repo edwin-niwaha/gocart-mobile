@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -93,11 +93,6 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const isTablet = width >= 768;
-  const numColumns = isTablet ? 3 : 2;
-  const gap = 12;
-  const horizontalPadding = spacing.lg * 2;
-  const gridCardWidth =
-    (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
   const horizontalProductCardWidth = isTablet ? 220 : 168;
   const categoryCardWidth = isTablet ? 94 : 82;
 
@@ -184,15 +179,18 @@ export default function HomeScreen() {
   const getImage = (item: Product) =>
     item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
 
-  const getActiveVariants = (product: Product) => {
+  const getActiveVariants = useCallback((product: Product) => {
     const variants = (product.variants || []) as ProductVariantShape[];
     return dedupeVariants(variants.filter((variant) => variant.is_active));
-  };
+  }, []);
 
-  const getPurchasableVariants = (product: Product) =>
-    getActiveVariants(product).filter((variant) => variant.is_in_stock);
+  const getPurchasableVariants = useCallback(
+    (product: Product) =>
+      getActiveVariants(product).filter((variant) => variant.is_in_stock),
+    [getActiveVariants]
+  );
 
-  const getProductStockInfo = (product: Product) => {
+  const getProductStockInfo = useCallback((product: Product) => {
     const activeVariants = getActiveVariants(product);
     const purchasableVariants = getPurchasableVariants(product);
 
@@ -228,7 +226,7 @@ export default function HomeScreen() {
           ? 'cart-outline'
           : 'options-outline',
     };
-  };
+  }, [getActiveVariants, getPurchasableVariants]);
 
   const getProductSubtitle = (product: Product) => {
     const categoryName = getCategoryName(product.category as ProductCategoryShape);
@@ -240,7 +238,7 @@ export default function HomeScreen() {
     }
 
     return categoryName
-      ? `${categoryName} • ${activeVariants.length} options`
+      ? `${categoryName} â€¢ ${activeVariants.length} options`
       : `${activeVariants.length} options`;
   };
 
@@ -294,7 +292,7 @@ export default function HomeScreen() {
         const { isOutOfStock } = getProductStockInfo(product);
         return !isOutOfStock;
       }).length,
-    [filteredProducts]
+    [filteredProducts, getProductStockInfo]
   );
 
   const formatPrice = (price: string | number) =>
@@ -445,66 +443,6 @@ export default function HomeScreen() {
     );
   };
 
-  const renderGridProduct = ({ item }: { item: Product }) => {
-    const wished = wishlistItems.some(
-      (wishlistItem) => wishlistItem.product.id === item.id
-    );
-
-    return (
-      <View style={[styles.gridCard, { width: gridCardWidth }]}>
-        <Pressable onPress={() => router.push(`/product/${item.slug}`)}>
-          <Image
-            source={{ uri: getImage(item) }}
-            style={[styles.gridCardImage, { height: isTablet ? 168 : 140 }]}
-          />
-        </Pressable>
-
-        <Pressable
-          onPress={() =>
-            protectedAction(async () => {
-              await toggleWishlist(item.id);
-            })
-          }
-          style={styles.wishlistBtn}
-        >
-          <Ionicons
-            name={wished ? 'heart' : 'heart-outline'}
-            size={18}
-            color={colors.primary}
-          />
-        </Pressable>
-
-        {item.is_featured ? (
-          <View style={styles.featuredPill}>
-            <Text style={styles.featuredPillText}>Featured</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.gridCardBody}>
-          <Pressable onPress={() => router.push(`/product/${item.slug}`)}>
-            <Text numberOfLines={1} style={styles.gridCardTitle}>
-              {item.title}
-            </Text>
-            <Text numberOfLines={1} style={styles.gridCardSubtitle}>
-              {getProductSubtitle(item)}
-            </Text>
-          </Pressable>
-
-          <View style={styles.gridCardMeta}>
-            <Text style={styles.gridCardPrice}>
-              {formatPrice(item.base_price)}
-            </Text>
-            {renderStockText(item)}
-          </View>
-
-          <View style={styles.gridCardFooter}>
-            {renderActionButton(item, styles.cartBtn, styles.cartBtnText, 16)}
-          </View>
-        </View>
-      </View>
-    );
-  };
-
   const renderHorizontalProductCard = (item: Product) => {
     const wished = wishlistItems.some(
       (wishlistItem) => wishlistItem.product.id === item.id
@@ -645,7 +583,7 @@ export default function HomeScreen() {
             <View style={styles.searchSummaryRow}>
               <Text style={styles.searchSummaryText}>
                 {filteredProducts.length} result
-                {filteredProducts.length === 1 ? '' : 's'} • {inStockCount} in
+                {filteredProducts.length === 1 ? '' : 's'} â€¢ {inStockCount} in
                 stock
               </Text>
 

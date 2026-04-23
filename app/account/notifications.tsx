@@ -121,7 +121,6 @@ export default function AccountNotificationsScreen() {
       <Stack.Screen
         options={{
           title: 'Email Updates',
-          headerBackTitleVisible: false,
         }}
       />
 

@@ -13,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack } from 'expo-router';
 
 import { Screen } from '@/components/Screen';
-import { authApi } from '@/api/services';
+import { authApi, getErrorMessage } from '@/api/services';
 import { colors, spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -124,14 +124,13 @@ export default function ProfileScreen() {
           ? selectedImage.uri
           : `file://${selectedImage.uri}`;
 
-        formData.append(
-          'avatar',
-          {
-            uri: uploadUri,
-            name: filename,
-            type: fileType,
-          } as any
-        );
+        const avatarFile = {
+          uri: uploadUri,
+          name: filename,
+          type: fileType,
+        } as unknown as Blob;
+
+        formData.append('avatar', avatarFile);
 
         await authApi.updateProfile(formData);
       } else {
@@ -146,19 +145,8 @@ export default function ProfileScreen() {
       setSelectedImage(null);
 
       Alert.alert('Success', 'Profile updated successfully.');
-    } catch (error: any) {
-      console.log('PROFILE UPDATE ERROR MESSAGE:', error?.message);
-      console.log('PROFILE UPDATE ERROR RESPONSE:', error?.response?.data);
-      console.log('PROFILE UPDATE ERROR STATUS:', error?.response?.status);
-
-      Alert.alert(
-        'Update failed',
-        typeof error?.response?.data === 'string'
-          ? error.response.data
-          : JSON.stringify(
-              error?.response?.data || error?.message || 'Something went wrong'
-            )
-      );
+    } catch (error: unknown) {
+      Alert.alert('Update failed', getErrorMessage(error, 'Profile update failed.'));
     } finally {
       setSaving(false);
     }

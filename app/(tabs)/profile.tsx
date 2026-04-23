@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Link } from 'expo-router';
+import { Link, type Href } from 'expo-router';
 import {
   Image,
   Linking,
@@ -19,14 +19,14 @@ import { fullName } from '@/utils/format';
 type MenuRowProps = {
   label: string;
   icon: string;
-  href?: string;
+  href?: Href;
   onPress?: () => void;
   danger?: boolean;
   noBorder?: boolean;
 };
 
 type QuickActionItem = {
-  href: string;
+  href: Href;
   icon: string;
   label: string;
   count?: number;
@@ -95,7 +95,10 @@ function QuickActionsGrid({ items }: { items: QuickActionItem[] }) {
   return (
     <View style={styles.quickActionsCard}>
       {items.map((item) => (
-        <IconTile key={item.href} {...item} />
+        <IconTile
+          key={`${item.label}-${typeof item.href === 'string' ? item.href : item.href.pathname}`}
+          {...item}
+        />
       ))}
     </View>
   );
@@ -224,7 +227,10 @@ export default function ProfileScreen() {
     }
   }, [isAuthenticated, loadAuthedData]);
 
-  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const safeNotifications = useMemo(
+    () => (Array.isArray(notifications) ? notifications : []),
+    [notifications]
+  );
   const unreadCount = useMemo(
     () => safeNotifications.filter((item) => !item.is_read).length,
     [safeNotifications]
@@ -252,7 +258,7 @@ export default function ProfileScreen() {
     () => [
       { href: '/orders', icon: '📦', label: 'Orders', count: orders.length },
       { href: '/notifications', icon: '📬', label: 'Inbox', count: unreadCount },
-      { href: '#', icon: '⭐', label: 'Ratings', count: reviews.length },
+      { href: '/orders', icon: '⭐', label: 'Ratings', count: reviews.length },
       { href: '/addresses', icon: '📍', label: 'Addresses', count: addresses.length },
       { href: '/account', icon: '⚙️', label: 'Settings' },
     ],

@@ -11,11 +11,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { api } from '@/api/client';
+import { getErrorMessage } from '@/api/services';
 import { Screen } from '@/components/Screen';
 import { colors, spacing } from '@/constants/theme';
 import { showError, showSuccess } from '@/utils/toast';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const MIN_MESSAGE_LENGTH = 10;
 
 export default function SupportScreen() {
@@ -26,6 +27,7 @@ export default function SupportScreen() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const successScale = useRef(new Animated.Value(1)).current;
 
@@ -36,6 +38,10 @@ export default function SupportScreen() {
       setSubmitSuccess(false);
       successScale.setValue(1);
     }
+
+    if (submitError) {
+      setSubmitError(null);
+    }
   };
 
   const handleCall = async () => {
@@ -43,7 +49,10 @@ export default function SupportScreen() {
     const supported = await Linking.canOpenURL(url);
     if (supported) {
       await Linking.openURL(url);
+      return;
     }
+
+    showError('Phone calls are not available on this device.');
   };
 
   const handleEmail = async () => {
@@ -51,7 +60,10 @@ export default function SupportScreen() {
     const supported = await Linking.canOpenURL(url);
     if (supported) {
       await Linking.openURL(url);
+      return;
     }
+
+    showError('Email is not available on this device.');
   };
 
   const handleOpenMap = async () => {
@@ -60,7 +72,10 @@ export default function SupportScreen() {
     const supported = await Linking.canOpenURL(url);
     if (supported) {
       await Linking.openURL(url);
+      return;
     }
+
+    showError('Maps are not available on this device.');
   };
 
   const isValidEmail = (email: string) => {
@@ -126,32 +141,12 @@ export default function SupportScreen() {
 
     if (!validateForm()) return;
 
-    if (!API_BASE_URL) {
-      showError('API configuration error.');
-      return;
-    }
-
     try {
       setSubmitting(true);
       setSubmitSuccess(false);
+      setSubmitError(null);
 
-      const response = await fetch(`${API_BASE_URL}/contact/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name, email, message }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        const errorMessage =
-          data?.detail ||
-          data?.message ||
-          'Failed to send message. Please try again later.';
-        throw new Error(errorMessage);
-      }
+      await api.post('/contact/', { name, email, message });
 
       setFormData({
         name: '',
@@ -162,9 +157,11 @@ export default function SupportScreen() {
       setSubmitSuccess(true);
       animateSuccess();
       showSuccess('Your message has been sent successfully.');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Failed to send message.');
       setSubmitSuccess(false);
-      showError(error?.message || 'Failed to send message.');
+      setSubmitError(message);
+      showError(message);
     } finally {
       setSubmitting(false);
     }
@@ -241,6 +238,7 @@ export default function SupportScreen() {
               style={styles.input}
               value={formData.name}
               onChangeText={(value) => handleChange('name', value)}
+              editable={!submitting}
             />
 
             <TextInput
@@ -251,6 +249,7 @@ export default function SupportScreen() {
               style={styles.input}
               value={formData.email}
               onChangeText={(value) => handleChange('email', value)}
+              editable={!submitting}
             />
 
             <TextInput
@@ -261,7 +260,12 @@ export default function SupportScreen() {
               style={styles.textArea}
               value={formData.message}
               onChangeText={(value) => handleChange('message', value)}
+              editable={!submitting}
             />
+
+            {submitError ? (
+              <Text style={styles.errorText}>{submitError}</Text>
+            ) : null}
 
             <Animated.View style={{ transform: [{ scale: successScale }] }}>
               <Pressable
@@ -280,7 +284,7 @@ export default function SupportScreen() {
                       <Text style={styles.primaryButtonText}>Sending...</Text>
                     </>
                   ) : submitSuccess ? (
-                    <Text style={styles.primaryButtonText}>✓ Sent Successfully</Text>
+                    <Text style={styles.primaryButtonText}>âœ“ Sent Successfully</Text>
                   ) : (
                     <Text style={styles.primaryButtonText}>Send Message</Text>
                   )}
@@ -359,7 +363,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   infoCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: spacing.md,
     borderWidth: 1,
@@ -388,7 +392,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   secondaryButton: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border ?? '#E5E7EB',
     borderRadius: 14,
@@ -402,7 +406,7 @@ const styles = StyleSheet.create({
   },
 
   formCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: spacing.md,
     borderWidth: 1,
@@ -466,6 +470,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#fff',
   },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+  },
 
   locationSection: {
     paddingHorizontal: spacing.md,
@@ -486,7 +496,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   mapCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: spacing.lg,
     borderWidth: 1,

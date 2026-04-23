@@ -40,6 +40,9 @@ type SelectedProduct = {
   review: Review | null;
 };
 
+const EMPTY_ORDERS: Order[] = [];
+const EMPTY_REVIEWS: Review[] = [];
+
 function normalizeStatus(status?: string): OrderStatus | string {
   return (status || 'PENDING').toUpperCase();
 }
@@ -271,8 +274,8 @@ export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const shop = useShop();
 
-  const orders = shop.orders ?? [];
-  const reviews = shop.reviews ?? [];
+  const orders = shop.orders ?? EMPTY_ORDERS;
+  const reviews = shop.reviews ?? EMPTY_REVIEWS;
   const loadOrders = shop.loadOrders;
   const loadingOrders = shop.loadingOrders ?? false;
   const addReview = shop.addReview;
