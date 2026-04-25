@@ -8,13 +8,17 @@ import type {
   Cart,
   CartItem,
   Category,
+  CheckoutOrderPayload,
+  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
+  DeliveryOption,
   ListResponse,
   Notification,
   Order,
   OrderItem,
   PaginatedResponse,
+  PickupStation,
   Product,
   ProductRating,
   Review,
@@ -499,27 +503,10 @@ export const orderApi = {
   async checkout(payload: {
     address_id: number;
     description?: string;
-    payment_method?: string;
-    shipping_method_id?: number;
-    coupon_code?: string;
-  }): Promise<Order> {
+  }) {
     try {
-      const { data } = await api.post<
-        | Order
-        | {
-            order?: Order;
-            payment_reference?: string | null;
-            payment_status?: string | null;
-            payment_provider?: string | null;
-          }
-      >('/orders/checkout/', payload);
-
-      const wrapped = data as { order?: unknown };
-      if (isRecord(data) && isRecord(wrapped.order)) {
-        return wrapped.order as Order;
-      }
-
-      return data as Order;
+      const { data } = await api.post<Order>('/orders/checkout/', payload);
+      return data;
     } catch (error: any) {
       logApiError('POST /orders/checkout/ error:', error?.response?.data || error.message);
       throw error;
@@ -754,6 +741,23 @@ export const addressApi = {
 
 };
 
+export const shippingApi = {
+  async listPickupStations() {
+    try {
+      const { data } = await api.get<PickupStation[] | { results: PickupStation[] }>(
+        '/pickup-stations/'
+      );
+      return normalizeList(data);
+    } catch (error: any) {
+      console.log(
+        'GET /pickup-stations/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+};
+
 // paymentApi
 export type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
 
@@ -775,6 +779,9 @@ export interface CreatePaymentPayload {
 export interface InitiateMTNPayload {
   address_id: number;
   phone_number: string;
+  delivery_option?: DeliveryOption;
+  pickup_station_id?: number | null;
+  coupon_code?: string;
 }
 
 export interface InitiateMTNResponse {

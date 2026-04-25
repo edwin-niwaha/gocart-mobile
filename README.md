@@ -276,3 +276,7 @@ Contributions are easiest to review when they are small, focused, and validated 
 ## License
 
 This repository does not currently include a `LICENSE` file. Until one is added, coordinate with the maintainers before reusing, redistributing, or publishing the code outside its intended environment.
+
+- Builds
+eas build -p android
+eas build -p ios

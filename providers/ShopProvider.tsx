@@ -13,6 +13,8 @@ import { logError } from '@/utils/logger';
 import type {
   CartItem,
   Category,
+  CheckoutOrderPayload,
+  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
   Notification,
@@ -78,7 +80,7 @@ type ShopContextType = {
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
-  checkout: (payload: { address_id: number; payment_method?: string }) => Promise<Order>;
+  checkout: (payload: { address_id: number }) => Promise<Order>;
   markNotificationRead: (id: number) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
   markingNotificationIds: number[];
@@ -571,13 +573,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkout = useCallback(
-    async ({
-      address_id,
-      payment_method = 'CASH',
-    }: {
-      address_id: number;
-      payment_method?: string;
-    }) => {
+    async ({ address_id }: { address_id: number }) => {
       if (!cartItems.length) {
         throw new Error('Your cart is empty.');
       }
@@ -591,10 +587,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Selected address was not found.');
       }
 
-      const order = await orderApi.checkout({
+      const response = await orderApi.checkout({
         address_id,
         payment_method,
         description: 'Placed from mobile app',
+        delivery_option,
+        pickup_station_id,
       });
 
       const [nextOrders, nextCartItems] = await Promise.all([
@@ -605,8 +603,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       applyOrdersResponse(nextOrders, 'replace');
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
 
-      showSuccess('Checkout completed successfully.');
-      return order;
+      return response;
     },
     [addresses, applyOrdersResponse, cartItems]
   );

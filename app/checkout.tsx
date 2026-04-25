@@ -23,12 +23,30 @@ import type {
   CustomerAddress,
   CustomerAddressPayload,
   CustomerAddressRegion,
+  DeliveryOption,
+  PickupStation,
 } from '@/types';
 import { money } from '@/utils/format';
-import { getErrorMessage, paymentApi } from '@/api/services';
-import type { PaymentStatusResponse } from '@/api/services';
+import { paymentApi } from '@/api/services';
 
 type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
+
+const DELIVERY_OPTIONS: ReadonlyArray<{
+  label: string;
+  subtitle: string;
+  value: DeliveryOption;
+}> = [
+  {
+    label: 'Home delivery',
+    subtitle: 'Delivered to your selected address',
+    value: 'HOME_DELIVERY',
+  },
+  {
+    label: 'Pickup station',
+    subtitle: 'Collect from a nearby station',
+    value: 'PICKUP_STATION',
+  },
+];
 
 const PAYMENT_OPTIONS: readonly {
   label: string;
@@ -405,12 +423,44 @@ export default function CheckoutScreen() {
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [expandedAddressId, setExpandedAddressId] = useState<number | null>(null);
   const [paymentProvider, setPaymentProvider] = useState<PaymentProvider>('CASH');
+  const [deliveryOption, setDeliveryOption] =
+    useState<DeliveryOption>('HOME_DELIVERY');
+  const [pickupStations, setPickupStations] = useState<PickupStation[]>([]);
+  const [selectedPickupStationId, setSelectedPickupStationId] = useState<number | null>(null);
+  const [loadingPickupStations, setLoadingPickupStations] = useState(false);
   const [mtnPhone, setMtnPhone] = useState('');
   const [pollingPayment, setPollingPayment] = useState(false);
 
   useEffect(() => {
     loadAuthedData().catch(() => undefined);
   }, [loadAuthedData]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPickupStations = async () => {
+      try {
+        setLoadingPickupStations(true);
+        const stations = await shippingApi.listPickupStations();
+        if (!active) return;
+
+        setPickupStations(Array.isArray(stations) ? stations : []);
+      } catch {
+        if (!active) return;
+        setPickupStations([]);
+      } finally {
+        if (active) {
+          setLoadingPickupStations(false);
+        }
+      }
+    };
+
+    loadPickupStations().catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!addresses.length) {
@@ -450,6 +500,15 @@ export default function CheckoutScreen() {
   const selectedAddress = useMemo(() => {
     return addresses.find((item) => item.id === selectedAddressId) ?? null;
   }, [addresses, selectedAddressId]);
+  const selectedPickupStation = useMemo(() => {
+    return (
+      pickupStations.find((item) => item.id === selectedPickupStationId) ?? null
+    );
+  }, [pickupStations, selectedPickupStationId]);
+  const estimatedPickupFee =
+    deliveryOption === 'PICKUP_STATION' && selectedPickupStation
+      ? Number(selectedPickupStation.fee || 0)
+      : 0;
 
   const cashOption = PAYMENT_OPTIONS.find((option) => option.value === 'CASH');
   const mobileMoneyOptions = PAYMENT_OPTIONS.filter(
@@ -590,15 +649,27 @@ export default function CheckoutScreen() {
       return;
     }
 
-    const order = await checkout({
-      address_id: selectedAddressId,
-      payment_method: 'CASH',
-    });
+    const order = await checkout({ address_id: selectedAddressId });
 
-    showSuccess(`Order ${order.slug} placed successfully.`);
+    try {
+      await paymentApi.create({
+        order: order.id,
+        provider: 'CASH',
+        amount: total,
+        currency: 'UGX',
+      });
+    } catch (paymentError: any) {
+      showError(
+        paymentError?.response?.data?.detail ||
+          paymentError?.message ||
+          'Order placed but payment record could not be saved.'
+      );
+    }
+
+    showSuccess(`Order ${result.order.slug} placed successfully.`);
     await loadAuthedData().catch(() => undefined);
     router.replace('/(tabs)/orders');
-  }, [checkout, loadAuthedData, selectedAddressId]);
+  }, [checkout, loadAuthedData, selectedAddressId, total]);
 
   const handleMTNCheckout = useCallback(async () => {
     if (!selectedAddressId) {
@@ -618,9 +689,20 @@ export default function CheckoutScreen() {
       return;
     }
 
+    if (
+      deliveryOption === 'PICKUP_STATION' &&
+      !selectedPickupStationId
+    ) {
+      showInfo('Please select a pickup station.');
+      return;
+    }
+
     const payment = await paymentApi.initiateMTN({
       address_id: selectedAddressId,
       phone_number: normalizedPhone,
+      delivery_option: deliveryOption,
+      pickup_station_id:
+        deliveryOption === 'PICKUP_STATION' ? selectedPickupStationId : null,
     });
 
     showInfo('Approve the MTN Mobile Money prompt on your phone.');
@@ -633,7 +715,14 @@ export default function CheckoutScreen() {
     showSuccess(`Order ${result.order.slug} placed successfully.`);
     await loadAuthedData().catch(() => undefined);
     router.replace('/(tabs)/orders');
-  }, [loadAuthedData, mtnPhone, pollPaymentStatus, selectedAddressId]);
+  }, [
+    deliveryOption,
+    loadAuthedData,
+    mtnPhone,
+    pollPaymentStatus,
+    selectedAddressId,
+    selectedPickupStationId,
+  ]);
 
   const onPlaceOrder = async () => {
     if (isBusy) return;
@@ -645,6 +734,14 @@ export default function CheckoutScreen() {
 
     if (!selectedAddressId) {
       showInfo('Please select or add a delivery address before placing your order.');
+      return;
+    }
+
+    if (
+      deliveryOption === 'PICKUP_STATION' &&
+      !selectedPickupStationId
+    ) {
+      showInfo('Please select a pickup station before placing your order.');
       return;
     }
 
@@ -742,6 +839,99 @@ return (
                 </Pressable>
               )}
             </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionTitleBlock}>
+            <Text style={styles.eyebrow}>DELIVERY</Text>
+            <Text style={styles.title}>Choose your delivery flow</Text>
+            <Text style={styles.sectionSubtitle}>
+              Pick home delivery or collect the order from a pickup station.
+            </Text>
+          </View>
+
+          <View style={styles.addressList}>
+            {DELIVERY_OPTIONS.map((option) => {
+              const selected = deliveryOption === option.value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setDeliveryOption(option.value)}
+                  style={[
+                    styles.addressCard,
+                    selected && styles.addressCardSelected,
+                  ]}
+                >
+                  <View style={styles.addressHeader}>
+                    <Text style={styles.addressTitle}>{option.label}</Text>
+                    {selected ? (
+                      <View style={styles.selectedBadge}>
+                        <Text style={styles.selectedBadgeText}>Selected</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.cardText}>{option.subtitle}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {deliveryOption === 'PICKUP_STATION' ? (
+            loadingPickupStations ? (
+              <Text style={styles.helperText}>Loading pickup stations...</Text>
+            ) : pickupStations.length ? (
+              <View style={styles.addressList}>
+                {pickupStations.map((station) => {
+                  const selected = station.id === selectedPickupStationId;
+
+                  return (
+                    <Pressable
+                      key={station.id}
+                      onPress={() => setSelectedPickupStationId(station.id)}
+                      style={[
+                        styles.addressCard,
+                        selected && styles.addressCardSelected,
+                      ]}
+                    >
+                      <View style={styles.addressHeader}>
+                        <Text style={styles.addressTitle}>{station.name}</Text>
+                        {selected ? (
+                          <View style={styles.selectedBadge}>
+                            <Text style={styles.selectedBadgeText}>Selected</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.addressDetails}>
+                        <Text style={styles.cardText}>
+                          {station.area}, {station.city}
+                        </Text>
+                        <Text style={styles.cardText}>{station.address}</Text>
+                        <Text style={styles.cardText}>
+                          Pickup fee: {money(Number(station.fee || 0))}
+                        </Text>
+                        {!!station.opening_hours && (
+                          <Text style={styles.cardText}>
+                            Hours: {station.opening_hours}
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <EmptyState
+                title="No pickup stations"
+                subtitle="Pickup stations are not available right now for this store."
+              />
+            )
+          ) : (
+            <Text style={styles.helperText}>
+              Your selected address will be used for home delivery.
+            </Text>
           )}
         </View>
 
@@ -912,15 +1102,42 @@ return (
             </View>
 
             <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Delivery option</Text>
+              <Text style={styles.metaValue}>
+                {deliveryOption === 'PICKUP_STATION'
+                  ? 'Pickup station'
+                  : 'Home delivery'}
+              </Text>
+            </View>
+
+            {deliveryOption === 'PICKUP_STATION' ? (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Pickup station</Text>
+                <Text style={styles.metaValue}>
+                  {selectedPickupStation?.name || 'Not selected'}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Payment</Text>
               <Text style={styles.metaValue}>{paymentProvider}</Text>
             </View>
           </View>
 
           <View style={styles.totalBox}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{money(total)}</Text>
+            <Text style={styles.totalLabel}>
+              {estimatedPickupFee > 0 ? 'Estimated total' : 'Items subtotal'}
+            </Text>
+            <Text style={styles.totalValue}>
+              {money(total + estimatedPickupFee)}
+            </Text>
           </View>
+          <Text style={styles.helperText}>
+            {estimatedPickupFee > 0
+              ? `Includes pickup fee of ${money(estimatedPickupFee)}.`
+              : 'Home delivery fee is added when the order is placed, based on the active delivery configuration.'}
+          </Text>
         </View>
 
         <View style={styles.ctaCard}>
