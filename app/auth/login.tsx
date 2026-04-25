@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -84,7 +84,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const routeAuthenticatedUser = (signedInUser: NonNullable<typeof user>) => {
+  const routeAuthenticatedUser = useCallback((signedInUser: NonNullable<typeof user>) => {
     if (signedInUser.user_type === 'ADMIN') {
       router.replace('/');
       return;
@@ -96,7 +96,7 @@ export default function LoginScreen() {
     }
 
     router.replace('/(tabs)');
-  };
+  }, []);
 
   const { googleLoading, startGoogleAuth } = useGoogleAuth({
     onErrorTitle: 'Google login failed',
@@ -108,7 +108,7 @@ export default function LoginScreen() {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
     routeAuthenticatedUser(user);
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, routeAuthenticatedUser, user]);
 
   const handleLogin = async () => {
     try {

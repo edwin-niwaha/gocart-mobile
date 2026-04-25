@@ -21,10 +21,10 @@ import type {
   CustomerAddressRegion,
 } from '@/types';
 
-const REGION_OPTIONS: ReadonlyArray<{
+const REGION_OPTIONS: readonly {
   label: string;
   value: CustomerAddressRegion;
-}> = [
+}[] = [
   { label: 'Kampala Area', value: 'kampala_area' },
   { label: 'Entebbe Area', value: 'entebbe_area' },
   { label: 'Central Region', value: 'central_region' },

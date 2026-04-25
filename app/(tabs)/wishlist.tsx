@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { AuthGate } from '@/components/AuthGate';
@@ -8,6 +8,7 @@ import { ProductCard } from '@/components/ProductCard';
 import { colors, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
+import type { Product, ProductVariant } from '@/types';
 
 export default function WishlistScreen() {
   const { wishlistItems, loadAuthedData, addToCart, toggleWishlist } = useShop();
@@ -18,10 +19,10 @@ export default function WishlistScreen() {
     loadAuthedData().catch(() => undefined);
   }, [loadAuthedData]);
 
-  const getActiveVariants = (product: any) =>
-    product.variants?.filter((variant: any) => variant.is_active) || [];
+  const getActiveVariants = (product: Product): ProductVariant[] =>
+    product.variants?.filter((variant) => variant.is_active) || [];
 
-  const handleAddToCart = async (product: any) => {
+  const handleAddToCart = async (product: Product) => {
     const activeVariants = getActiveVariants(product);
 
     if (!activeVariants.length) {

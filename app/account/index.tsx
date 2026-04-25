@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, type Href } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
@@ -9,7 +9,7 @@ import { colors, spacing } from '@/constants/theme';
 type SettingsRowProps = {
   label: string;
   icon: string;
-  href?: string;
+  href?: Href;
   subtitle?: string;
   danger?: boolean;
   onPress?: () => void;
@@ -71,7 +71,7 @@ function SettingsRow({
         {loading ? (
           <ActivityIndicator size="small" color={danger ? colors.danger : colors.primary} />
         ) : isLinkRow ? (
-          <Text style={styles.chevron}>›</Text>
+          <Text style={styles.chevron}>â€º</Text>
         ) : danger ? (
           <Text style={[styles.actionText, styles.dangerText]}>Exit</Text>
         ) : null}
@@ -123,19 +123,19 @@ export default function SettingsScreen() {
 
           <View style={styles.card}>
             <SettingsRow
-              icon="👤"
+              icon="ðŸ‘¤"
               label="Profile"
               subtitle="View and update your personal details"
               href="/account/profile"
             />
             <SettingsRow
-              icon="📍"
+              icon="ðŸ“"
               label="Addresses"
               subtitle="Manage your saved delivery addresses"
               href="/addresses"
             />
             <SettingsRow
-              icon="📬"
+              icon="ðŸ“¬"
               label="Notifications"
               subtitle="Manage email updates, offers, and alerts"
               href="/account/notifications"
@@ -152,7 +152,7 @@ export default function SettingsScreen() {
           <View style={styles.card}>
             {!user?.is_email_verified && (
               <SettingsRow
-                icon="📧"
+                icon="ðŸ“§"
                 label="Verify Email"
                 subtitle="Confirm your email address for added account security"
                 href="/auth/verify-email"
@@ -160,14 +160,14 @@ export default function SettingsScreen() {
             )}
 
             <SettingsRow
-              icon="🔒"
+              icon="ðŸ”’"
               label="Change Password"
               subtitle="Update your current password"
               href="/auth/change-password"
             />
 
             <SettingsRow
-              icon="🔑"
+              icon="ðŸ”‘"
               label="Forgot Password"
               subtitle="Reset your password using your email"
               href="/auth/forgot-password"
@@ -183,13 +183,13 @@ export default function SettingsScreen() {
 
           <View style={styles.card}>
             <SettingsRow
-              icon="❓"
+              icon="â“"
               label="Help & Support"
               subtitle="Get help with orders, payments, and account issues"
               href="/support"
             />
             <SettingsRow
-              icon="📄"
+              icon="ðŸ“„"
               label="Terms & Privacy"
               subtitle="Review our terms of service and privacy policy"
               href="/legal"
@@ -205,7 +205,7 @@ export default function SettingsScreen() {
 
           <View style={styles.card}>
             <SettingsRow
-              icon="🚪"
+              icon="ðŸšª"
               label={loading ? 'Signing out...' : 'Logout'}
               subtitle="Securely sign out from this device"
               onPress={logout}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { router } from 'expo-router';
 import {
+  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -26,7 +27,7 @@ import type {
   PickupStation,
 } from '@/types';
 import { money } from '@/utils/format';
-import { paymentApi, shippingApi } from '@/api/services';
+import { paymentApi } from '@/api/services';
 
 type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
 
@@ -47,11 +48,11 @@ const DELIVERY_OPTIONS: ReadonlyArray<{
   },
 ];
 
-const PAYMENT_OPTIONS: ReadonlyArray<{
+const PAYMENT_OPTIONS: readonly {
   label: string;
   subtitle: string;
   value: PaymentProvider;
-}> = [
+}[] = [
   {
     label: 'Pay on Delivery',
     subtitle: 'Cash or Mobile Money on arrival',
@@ -74,10 +75,10 @@ const PAYMENT_ICONS = {
   AIRTEL: require('@/assets/images/momo/airtel.png'),
 } as const;
 
-const REGION_OPTIONS: ReadonlyArray<{
+const REGION_OPTIONS: readonly {
   label: string;
   value: CustomerAddressRegion;
-}> = [
+}[] = [
   { label: 'Kampala Area', value: 'kampala_area' },
   { label: 'Entebbe Area', value: 'entebbe_area' },
   { label: 'Central Region', value: 'central_region' },
@@ -407,6 +408,7 @@ function AddressOption({
 
 export default function CheckoutScreen() {
   const {
+    loading: accountLoading,
     cartItems,
     addresses,
     loadAuthedData,
@@ -539,12 +541,8 @@ export default function CheckoutScreen() {
 
       closeAddAddress();
       showSuccess('Address saved successfully.');
-    } catch (error: any) {
-      showError(
-        error?.response?.data?.detail ||
-          error?.message ||
-          'Failed to save address. Please try again.'
-      );
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Failed to save address. Please try again.'));
     } finally {
       setSavingAddress(false);
     }
@@ -565,20 +563,19 @@ export default function CheckoutScreen() {
       await updateAddress(selectedAddress.id, { is_default: true });
       showSuccess('Default address updated successfully.');
       await loadAuthedData().catch(() => undefined);
-    } catch (error: any) {
-      showError(
-        error?.response?.data?.detail ||
-          error?.message ||
-          'Failed to update address. Please try again.'
-      );
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Failed to update address. Please try again.'));
     }
   };
 
-  const getMtnFailureMessage = (statusRes: any): string => {
-    const reason =
-      statusRes?.provider_response?.status_check?.reason ||
-      statusRes?.reason ||
-      '';
+  const getMtnFailureMessage = (statusRes: PaymentStatusResponse): string => {
+    const providerResponse = statusRes.provider_response ?? {};
+    const statusCheck =
+      typeof providerResponse.status_check === 'object' &&
+      providerResponse.status_check !== null
+        ? (providerResponse.status_check as Record<string, unknown>)
+        : {};
+    const reason = statusCheck.reason || providerResponse.reason || '';
 
     const normalized = String(reason).toUpperCase();
 
@@ -638,12 +635,8 @@ export default function CheckoutScreen() {
         'Payment is still processing. Please confirm later from your payment status or orders.'
       );
       return false;
-    } catch (error: any) {
-      showError(
-        error?.response?.data?.detail ||
-          error?.message ||
-          'Could not confirm payment status right now.'
-      );
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Could not confirm payment status right now.'));
       return false;
     } finally {
       setPollingPayment(false);
@@ -656,31 +649,27 @@ export default function CheckoutScreen() {
       return;
     }
 
-    if (
-      deliveryOption === 'PICKUP_STATION' &&
-      !selectedPickupStationId
-    ) {
-      showInfo('Please select a pickup station.');
-      return;
-    }
+    const order = await checkout({ address_id: selectedAddressId });
 
-    const result = await checkout({
-      address_id: selectedAddressId,
-      delivery_option: deliveryOption,
-      pickup_station_id:
-        deliveryOption === 'PICKUP_STATION' ? selectedPickupStationId : null,
-    });
+    try {
+      await paymentApi.create({
+        order: order.id,
+        provider: 'CASH',
+        amount: total,
+        currency: 'UGX',
+      });
+    } catch (paymentError: any) {
+      showError(
+        paymentError?.response?.data?.detail ||
+          paymentError?.message ||
+          'Order placed but payment record could not be saved.'
+      );
+    }
 
     showSuccess(`Order ${result.order.slug} placed successfully.`);
     await loadAuthedData().catch(() => undefined);
     router.replace('/(tabs)/orders');
-  }, [
-    checkout,
-    deliveryOption,
-    loadAuthedData,
-    selectedAddressId,
-    selectedPickupStationId,
-  ]);
+  }, [checkout, loadAuthedData, selectedAddressId, total]);
 
   const handleMTNCheckout = useCallback(async () => {
     if (!selectedAddressId) {
@@ -775,12 +764,8 @@ export default function CheckoutScreen() {
       }
 
       showError('Unsupported payment method.');
-    } catch (error: any) {
-      showError(
-        error?.response?.data?.detail ||
-          error?.message ||
-          'Checkout failed. Please try again.'
-      );
+    } catch (error: unknown) {
+      showError(getErrorMessage(error, 'Checkout failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -820,7 +805,12 @@ return (
             </Pressable>
           </View>
 
-          {!addresses.length ? (
+          {accountLoading && !addresses.length ? (
+            <View style={styles.inlineLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.helperText}>Loading delivery details...</Text>
+            </View>
+          ) : !addresses.length ? (
             <EmptyState
               title="No address yet"
               subtitle="Add a delivery address to continue with checkout."
@@ -1074,6 +1064,13 @@ return (
               Confirm your items and total before placing the order.
             </Text>
           </View>
+
+          {!cartItems.length ? (
+            <EmptyState
+              title="Your cart is empty"
+              subtitle="Add products to your cart before placing an order."
+            />
+          ) : null}
 
           {cartItems.map((item) => {
             const itemTotal =
@@ -1570,6 +1567,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: colors.muted,
+  },
+
+  inlineLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: spacing.md,
   },
 
   input: {

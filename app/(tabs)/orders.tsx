@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Alert,
@@ -348,7 +348,6 @@ function OrderCard({
 export default function OrdersScreen() {
   const {
     orders = [],
-    totalOrders = 0,
     reviews = [],
     hasMoreOrders = false,
     loadingOrders = false,

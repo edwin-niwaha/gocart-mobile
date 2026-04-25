@@ -1,6 +1,7 @@
-import { api, API_BASE_URL } from '@/api/client';
+import { isAxiosError } from 'axios';
+import { api } from '@/api/client';
 import { normalizeList } from '@/utils/format';
-import { getTokens } from '@/utils/storage';
+import { logError } from '@/utils/logger';
 
 import type {
   AuthResponse,
@@ -26,8 +27,39 @@ import type {
   WishlistItem,
 } from '@/types';
 
-export function getErrorMessage(error: any, fallback = 'Something went wrong.') {
-  const data = error?.response?.data;
+type ErrorPayload = Record<string, unknown> | string | unknown[] | null | undefined;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value;
+  if (Array.isArray(value) && value.length) return firstString(value[0]);
+  return null;
+}
+
+export function getApiErrorData(error: unknown): ErrorPayload {
+  if (isAxiosError(error)) {
+    return error.response?.data as ErrorPayload;
+  }
+
+  if (isRecord(error)) {
+    const response = error.response;
+    if (isRecord(response) && 'data' in response) {
+      return response.data as ErrorPayload;
+    }
+  }
+
+  return null;
+}
+
+export function getErrorMessage(error: unknown, fallback = 'Something went wrong.') {
+  const data =
+    getApiErrorData(error) ??
+    (typeof error === 'string' || Array.isArray(error) || isRecord(error)
+      ? (error as ErrorPayload)
+      : null);
 
   if (typeof data === 'string' && data.trim()) {
     return data;
@@ -37,65 +69,45 @@ export function getErrorMessage(error: any, fallback = 'Something went wrong.') 
     return String(data[0]);
   }
 
-  if (data?.detail) {
-    return String(data.detail);
+  if (isRecord(data)) {
+    const orderedFields = [
+      'detail',
+      'message',
+      'non_field_errors',
+      'email',
+      'username',
+      'password',
+      'password_confirm',
+      'code',
+      'quantity',
+      'variant_id',
+      'product_id',
+      'rating',
+      'street_name',
+      'city',
+      'phone_number',
+      'additional_telephone',
+      'additional_information',
+      'region',
+      'is_default',
+      'address_id',
+    ];
+
+    for (const field of orderedFields) {
+      const message = firstString(data[field]);
+      if (message) return message;
+    }
   }
 
-  if (Array.isArray(data?.non_field_errors) && data.non_field_errors.length) {
-    return String(data.non_field_errors[0]);
-  }
-
-  if (Array.isArray(data?.quantity) && data.quantity.length) {
-    return String(data.quantity[0]);
-  }
-
-  if (Array.isArray(data?.variant_id) && data.variant_id.length) {
-    return String(data.variant_id[0]);
-  }
-
-  if (Array.isArray(data?.product_id) && data.product_id.length) {
-    return String(data.product_id[0]);
-  }
-
-  if (Array.isArray(data?.street_name) && data.street_name.length) {
-    return String(data.street_name[0]);
-  }
-
-  if (Array.isArray(data?.city) && data.city.length) {
-    return String(data.city[0]);
-  }
-
-  if (Array.isArray(data?.phone_number) && data.phone_number.length) {
-    return String(data.phone_number[0]);
-  }
-
-  if (
-    Array.isArray(data?.additional_telephone) &&
-    data.additional_telephone.length
-  ) {
-    return String(data.additional_telephone[0]);
-  }
-
-  if (
-    Array.isArray(data?.additional_information) &&
-    data.additional_information.length
-  ) {
-    return String(data.additional_information[0]);
-  }
-
-  if (Array.isArray(data?.region) && data.region.length) {
-    return String(data.region[0]);
-  }
-
-  if (Array.isArray(data?.address_id) && data.address_id.length) {
-    return String(data.address_id[0]);
-  }
-
-  if (typeof error?.message === 'string' && error.message.trim()) {
+  if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
 
   return fallback;
+}
+
+function logApiError(message: string, error: unknown) {
+  logError(message, getApiErrorData(error) ?? error);
 }
 
 function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
@@ -113,7 +125,7 @@ function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
 
 function toList<T>(data: ListResponse<T> | { results?: T[] } | unknown): T[] {
   if (Array.isArray(data)) return data;
-  if (Array.isArray((data as any)?.results)) return (data as any).results;
+  if (isRecord(data) && Array.isArray(data.results)) return data.results as T[];
   return [];
 }
 
@@ -131,7 +143,7 @@ export const authApi = {
       const { data } = await api.post<AuthResponse>('/auth/register/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /auth/register/ error:', error?.response?.data || error.message);
+      logApiError('POST /auth/register/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -141,7 +153,7 @@ export const authApi = {
       const { data } = await api.post<AuthResponse>('/auth/login/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /auth/login/ error:', error?.response?.data || error.message);
+      logApiError('POST /auth/login/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -151,46 +163,24 @@ export const authApi = {
       const { data } = await api.get<User>('/auth/me/');
       return data;
     } catch (error: any) {
-      console.log('GET /auth/me/ error:', error?.response?.data || error.message);
+      logApiError('GET /auth/me/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
 
 
   async updateProfile(payload: FormData) {
-    const tokens = await getTokens();
-
-    const response = await fetch(`${API_BASE_URL}/auth/me/`, {
-      method: 'PATCH',
-      headers: {
-        Accept: 'application/json',
-        ...(tokens?.access
-          ? { Authorization: `Bearer ${tokens.access}` }
-          : {}),
-      },
-      body: payload,
-    });
-
-    const text = await response.text();
-
-    let data: any = null;
     try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
+      const { data } = await api.patch<User>('/auth/me/', payload, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+      return data;
+    } catch (error: any) {
+      logApiError('PATCH /auth/me/ multipart error:', error?.response?.data || error.message);
+      throw error;
     }
-
-    if (!response.ok) {
-      console.log('PATCH /auth/me/ FETCH status:', response.status);
-      console.log('PATCH /auth/me/ FETCH response:', data);
-      throw new Error(
-        typeof data === 'string'
-          ? data
-          : data?.detail || 'Profile update failed.'
-      );
-    }
-
-    return data;
   },
 
   async updateProfileJson(payload: {
@@ -207,7 +197,7 @@ export const authApi = {
       });
       return data;
     } catch (error: any) {
-      console.log('PATCH /auth/me/ JSON error:', error?.response?.data || error?.message);
+      logApiError('PATCH /auth/me/ JSON error:', error);
       throw error;
     }
   },
@@ -218,7 +208,7 @@ export const authApi = {
     try {
       await api.post('/auth/logout/', { refresh });
     } catch (error: any) {
-      console.log('POST /auth/logout/ error:', error?.response?.data || error.message);
+      logApiError('POST /auth/logout/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -230,7 +220,7 @@ export const authApi = {
       });
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         'POST /auth/social/google/ error:',
         error?.response?.data || error.message
       );
@@ -297,7 +287,7 @@ export const catalogApi = {
       });
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /products/ error:', error?.response?.data || error.message);
+      logApiError('GET /products/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -307,7 +297,7 @@ export const catalogApi = {
       const { data } = await api.get<Product>(`/products/${slug}/`);
       return data;
     } catch (error: any) {
-      console.log(`GET /products/${slug}/ error:`, error?.response?.data || error.message);
+      logApiError(`GET /products/${slug}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -327,7 +317,7 @@ export const catalogApi = {
       });
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /categories/ error:', error?.response?.data || error.message);
+      logApiError('GET /categories/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -340,14 +330,14 @@ export const cartApi = {
       const { data } = await api.post<Cart>('/cart/', {});
       return data;
     } catch (postError: any) {
-      console.log('POST /cart/ error:', postError?.response?.data || postError.message);
+      logApiError('POST /cart/ error:', postError?.response?.data || postError.message);
 
       try {
         const { data } = await api.get<Cart[] | { results: Cart[] }>('/cart/');
         const list = normalizeList(data);
         return list[0];
       } catch (getError: any) {
-        console.log('GET /cart/ error:', getError?.response?.data || getError.message);
+        logApiError('GET /cart/ error:', getError?.response?.data || getError.message);
         throw getError;
       }
     }
@@ -358,7 +348,7 @@ export const cartApi = {
       const { data } = await api.get<CartItem[] | { results: CartItem[] }>('/cart-items/');
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /cart-items/ error:', error?.response?.data || error.message);
+      logApiError('GET /cart-items/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -368,7 +358,7 @@ export const cartApi = {
       const { data } = await api.post<CartItem>('/cart-items/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /cart-items/ error:', error?.response?.data || error.message);
+      logApiError('POST /cart-items/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -378,7 +368,7 @@ export const cartApi = {
       const { data } = await api.patch<CartItem>(`/cart-items/${id}/`, payload);
       return data;
     } catch (error: any) {
-      console.log(`PATCH /cart-items/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`PATCH /cart-items/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -387,7 +377,7 @@ export const cartApi = {
     try {
       await api.delete(`/cart-items/${id}/`);
     } catch (error: any) {
-      console.log(`DELETE /cart-items/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`DELETE /cart-items/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -399,7 +389,7 @@ export const newsletterApi = {
       const { data } = await api.post('/newsletter/', { email });
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         'POST /newsletter/ error:',
         error?.response?.data || error.message
       );
@@ -414,7 +404,7 @@ export const newsletterApi = {
       );
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         'GET /newsletter/confirm/ error:',
         error?.response?.data || error.message
       );
@@ -427,7 +417,7 @@ export const newsletterApi = {
       const { data } = await api.post('/newsletter/unsubscribe/', { email });
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         'POST /newsletter/unsubscribe/ error:',
         error?.response?.data || error.message
       );
@@ -442,14 +432,14 @@ export const wishlistApi = {
       const { data } = await api.post<Wishlist>('/wishlist/', {});
       return data;
     } catch (postError: any) {
-      console.log('POST /wishlist/ error:', postError?.response?.data || postError.message);
+      logApiError('POST /wishlist/ error:', postError?.response?.data || postError.message);
 
       try {
         const { data } = await api.get<Wishlist[] | { results: Wishlist[] }>('/wishlist/');
         const list = normalizeList(data);
         return list[0];
       } catch (getError: any) {
-        console.log('GET /wishlist/ error:', getError?.response?.data || getError.message);
+        logApiError('GET /wishlist/ error:', getError?.response?.data || getError.message);
         throw getError;
       }
     }
@@ -460,7 +450,7 @@ export const wishlistApi = {
       const { data } = await api.get<WishlistItem[] | { results: WishlistItem[] }>('/wishlist-items/');
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /wishlist-items/ error:', error?.response?.data || error.message);
+      logApiError('GET /wishlist-items/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -470,7 +460,7 @@ export const wishlistApi = {
       const { data } = await api.post<WishlistItem>('/wishlist-items/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /wishlist-items/ error:', error?.response?.data || error.message);
+      logApiError('POST /wishlist-items/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -479,7 +469,7 @@ export const wishlistApi = {
     try {
       await api.delete(`/wishlist-items/${id}/`);
     } catch (error: any) {
-      console.log(`DELETE /wishlist-items/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`DELETE /wishlist-items/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -502,7 +492,7 @@ export const orderApi = {
 
       return [];
     } catch (error: any) {
-      console.log(
+      logApiError(
         `GET ${url ?? '/orders/'} error:`,
         error?.response?.data || error.message
       );
@@ -510,12 +500,15 @@ export const orderApi = {
     }
   },
 
-  async checkout(payload: CheckoutOrderPayload) {
+  async checkout(payload: {
+    address_id: number;
+    description?: string;
+  }) {
     try {
-      const { data } = await api.post<CheckoutResponse>('/orders/checkout/', payload);
+      const { data } = await api.post<Order>('/orders/checkout/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /orders/checkout/ error:', error?.response?.data || error.message);
+      logApiError('POST /orders/checkout/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -529,7 +522,7 @@ export const orderApi = {
       const { data } = await api.post<Order>('/orders/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /orders/ error:', error?.response?.data || error.message);
+      logApiError('POST /orders/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -544,7 +537,7 @@ export const orderApi = {
       const { data } = await api.post<OrderItem>('/order-items/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /order-items/ error:', error?.response?.data || error.message);
+      logApiError('POST /order-items/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -567,7 +560,7 @@ export const notificationApi = {
 
       return [];
     } catch (error: any) {
-      console.log(
+      logApiError(
         `GET ${url ?? '/notifications/'} error:`,
         error?.response?.data || error.message
       );
@@ -580,7 +573,7 @@ export const notificationApi = {
       const { data } = await api.post<Notification>(`/notifications/${id}/mark_read/`);
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         `POST /notifications/${id}/mark_read/ error:`,
         error?.response?.data || error.message
       );
@@ -593,7 +586,7 @@ export const notificationApi = {
       const { data } = await api.post('/notifications/mark_all_read/');
       return data;
     } catch (error: any) {
-      console.log(
+      logApiError(
         'POST /notifications/mark_all_read/ error:',
         error?.response?.data || error.message
       );
@@ -610,7 +603,7 @@ export const reviewApi = {
       });
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /reviews/ error:', error?.response?.data || error.message);
+      logApiError('GET /reviews/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -622,7 +615,7 @@ export const reviewApi = {
       });
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /product-reviews/ error:', error?.response?.data || error.message);
+      logApiError('GET /product-reviews/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -636,7 +629,7 @@ export const reviewApi = {
       const { data } = await api.post<Review>('/reviews/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /reviews/ error:', error?.response?.data || error.message);
+      logApiError('POST /reviews/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -652,7 +645,7 @@ export const reviewApi = {
       const { data } = await api.patch<Review>(`/reviews/${id}/`, payload);
       return data;
     } catch (error: any) {
-      console.log(`PATCH /reviews/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`PATCH /reviews/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -661,7 +654,7 @@ export const reviewApi = {
     try {
       await api.delete(`/reviews/${id}/`);
     } catch (error: any) {
-      console.log(`DELETE /reviews/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`DELETE /reviews/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -675,7 +668,7 @@ export const reviewApi = {
       const reviews = normalizeList(data);
       return reviews[0] ?? null;
     } catch (error: any) {
-      console.log('GET /reviews/ myReviewForProduct error:', error?.response?.data || error.message);
+      logApiError('GET /reviews/ myReviewForProduct error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -689,7 +682,7 @@ export const ratingApi = {
       });
       return normalizeList(data);
     } catch (error: any) {
-      console.log('GET /ratings/ error:', error?.response?.data || error.message);
+      logApiError('GET /ratings/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -706,7 +699,7 @@ export const addressApi = {
       const { data } = await api.get<CustomerAddress[] | { results: CustomerAddress[] }>('/addresses/');
       return toList<CustomerAddress>(data);
     } catch (error: any) {
-      console.log('GET /addresses/ error:', error?.response?.data || error.message);
+      logApiError('GET /addresses/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -716,7 +709,7 @@ export const addressApi = {
       const { data } = await api.post<CustomerAddress>('/addresses/', payload);
       return data;
     } catch (error: any) {
-      console.log('POST /addresses/ error:', error?.response?.data || error.message);
+      logApiError('POST /addresses/ error:', error?.response?.data || error.message);
       throw error;
     }
   },
@@ -726,7 +719,7 @@ export const addressApi = {
       const { data } = await api.patch<CustomerAddress>(`/addresses/${id}/`, payload);
       return data;
     } catch (error: any) {
-      console.log(`PATCH /addresses/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`PATCH /addresses/${id}/ error:`, error?.response?.data || error.message);
       throw error;
     }
   },
@@ -736,7 +729,7 @@ export const addressApi = {
       const { data } = await api.delete(`/addresses/${id}/`);
       return data;
     } catch (error: any) {
-      console.log(`DELETE /addresses/${id}/ error:`, error?.response?.data || error.message);
+      logApiError(`DELETE /addresses/${id}/ error:`, error?.response?.data || error.message);
 
       const message =
         error?.response?.data?.detail ||
@@ -808,7 +801,7 @@ export interface PaymentStatusResponse {
   phone_number: string;
   external_id: string;
   transaction_id: string;
-  provider_response: Record<string, any>;
+  provider_response: Record<string, unknown>;
   paid_at: string | null;
   created_at: string;
   updated_at: string;
@@ -818,7 +811,7 @@ export interface FinalizeOrderResponse {
   order: {
     id: number;
     slug: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   payment_reference: string;
 }

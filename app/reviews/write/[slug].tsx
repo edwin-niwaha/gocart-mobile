@@ -60,7 +60,7 @@ export default function WriteReviewScreen() {
           setRating(Number(myReview.rating) || 0);
           setComment(myReview.comment || '');
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!mounted) return;
         showError(getErrorMessage(error, 'Could not load this review form.'));
       } finally {
@@ -123,8 +123,7 @@ export default function WriteReviewScreen() {
       }
 
       router.push(`/reviews/${slug}`);
-    } catch (error: any) {
-      console.log('Review submit error:', error?.response?.data || error);
+    } catch (error: unknown) {
       showError(getErrorMessage(error, 'Failed to submit review.'));
     } finally {
       setSubmitting(false);

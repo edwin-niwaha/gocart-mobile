@@ -7,7 +7,9 @@ import {
   wishlistApi,
   notificationApi,
   reviewApi,
+  getErrorMessage,
 } from '@/api/services';
+import { logError } from '@/utils/logger';
 import type {
   CartItem,
   Category,
@@ -78,7 +80,7 @@ type ShopContextType = {
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
-  checkout: (payload: CheckoutOrderPayload) => Promise<CheckoutResponse>;
+  checkout: (payload: { address_id: number }) => Promise<Order>;
   markNotificationRead: (id: number) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
   markingNotificationIds: number[];
@@ -86,32 +88,6 @@ type ShopContextType = {
 };
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
-
-function getApiErrorMessage(error: any, fallback = 'Something went wrong.') {
-  const data = error?.response?.data;
-
-  if (typeof data === 'string') return data;
-  if (Array.isArray(data) && data.length) return String(data[0]);
-  if (data?.detail) return String(data.detail);
-  if (data?.non_field_errors?.[0]) return String(data.non_field_errors[0]);
-
-  if (data?.quantity?.[0]) return String(data.quantity[0]);
-  if (data?.variant_id?.[0]) return String(data.variant_id[0]);
-  if (data?.rating?.[0]) return String(data.rating[0]);
-
-  if (data?.street_name?.[0]) return String(data.street_name[0]);
-  if (data?.city?.[0]) return String(data.city[0]);
-  if (data?.phone_number?.[0]) return String(data.phone_number[0]);
-  if (data?.additional_telephone?.[0]) return String(data.additional_telephone[0]);
-  if (data?.additional_information?.[0]) return String(data.additional_information[0]);
-  if (data?.region?.[0]) return String(data.region[0]);
-  if (data?.is_default?.[0]) return String(data.is_default[0]);
-  if (data?.address_id?.[0]) return String(data.address_id[0]);
-
-  if (typeof error?.message === 'string') return error.message;
-
-  return fallback;
-}
 
 function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
   if (!value || typeof value !== 'object') return false;
@@ -271,7 +247,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setProducts(Array.isArray(nextProducts) ? nextProducts : []);
       setCategories(Array.isArray(nextCategories) ? nextCategories : []);
     } catch (error) {
-      console.log('loadCatalog error:', error);
+      logError('loadCatalog error:', error);
       setProducts([]);
       setCategories([]);
       showError('Failed to load catalog.');
@@ -291,7 +267,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await orderApi.list();
       applyOrdersResponse(response, 'replace');
     } catch (error) {
-      console.log('loadOrders error:', error);
+      logError('loadOrders error:', error);
       resetOrdersState();
       showError('Failed to load orders.');
     } finally {
@@ -310,7 +286,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await orderApi.list();
       applyOrdersResponse(response, 'replace');
     } catch (error) {
-      console.log('refreshOrders error:', error);
+      logError('refreshOrders error:', error);
       showError('Failed to refresh orders.');
     } finally {
       setRefreshingOrders(false);
@@ -325,7 +301,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await orderApi.list(nextOrdersUrl);
       applyOrdersResponse(response, 'append');
     } catch (error) {
-      console.log('loadMoreOrders error:', error);
+      logError('loadMoreOrders error:', error);
       showError('Failed to load more orders.');
     } finally {
       setLoadingMoreOrders(false);
@@ -343,7 +319,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await notificationApi.list();
       applyNotificationsResponse(response, 'replace');
     } catch (error) {
-      console.log('loadNotifications error:', error);
+      logError('loadNotifications error:', error);
       resetNotificationsState();
       showError('Failed to load notifications.');
     } finally {
@@ -362,7 +338,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await notificationApi.list();
       applyNotificationsResponse(response, 'replace');
     } catch (error) {
-      console.log('refreshNotifications error:', error);
+      logError('refreshNotifications error:', error);
       showError('Failed to refresh notifications.');
     } finally {
       setRefreshingNotifications(false);
@@ -377,7 +353,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const response = await notificationApi.list(nextNotificationsUrl);
       applyNotificationsResponse(response, 'append');
     } catch (error) {
-      console.log('loadMoreNotifications error:', error);
+      logError('loadMoreNotifications error:', error);
       showError('Failed to load more notifications.');
     } finally {
       setLoadingMoreNotifications(false);
@@ -425,7 +401,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       applyOrdersResponse(nextOrders, 'replace');
       applyNotificationsResponse(nextNotifications, 'replace');
     } catch (error) {
-      console.log('loadAuthedData error:', error);
+      logError('loadAuthedData error:', error);
       resetAuthedState();
       showError('Failed to load your account data.');
     } finally {
@@ -446,8 +422,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showSuccess('Address added successfully.');
       return created ?? null;
     } catch (error: any) {
-      console.log('addAddress error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to add address.'));
+      logError('addAddress error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to add address.'));
       return null;
     }
   }, [reloadAddresses]);
@@ -460,8 +436,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         showSuccess('Address updated successfully.');
         return true;
       } catch (error: any) {
-        console.log('updateAddress error:', error?.response?.data || error?.message);
-        showError(getApiErrorMessage(error, 'Failed to update address.'));
+        logError('updateAddress error:', error?.response?.data || error?.message);
+        showError(getErrorMessage(error, 'Failed to update address.'));
         return false;
       }
     },
@@ -475,8 +451,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showSuccess('Address removed successfully.');
       return true;
     } catch (error: any) {
-      console.log('removeAddress error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to remove address.'));
+      logError('removeAddress error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to remove address.'));
       return false;
     }
   }, [reloadAddresses]);
@@ -490,8 +466,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         showSuccess('Review added successfully.');
         return true;
       } catch (error: any) {
-        console.log('addReview error:', error?.response?.data || error?.message);
-        showError(getApiErrorMessage(error, 'Failed to add review.'));
+        logError('addReview error:', error?.response?.data || error?.message);
+        showError(getErrorMessage(error, 'Failed to add review.'));
         return false;
       }
     },
@@ -513,8 +489,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         showSuccess('Review updated successfully.');
         return true;
       } catch (error: any) {
-        console.log('updateReview error:', error?.response?.data || error?.message);
-        showError(getApiErrorMessage(error, 'Failed to update review.'));
+        logError('updateReview error:', error?.response?.data || error?.message);
+        showError(getErrorMessage(error, 'Failed to update review.'));
         return false;
       }
     },
@@ -533,8 +509,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showSuccess('Product added to cart.');
       return true;
     } catch (error: any) {
-      console.log('addToCart error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to add item to cart.'));
+      logError('addToCart error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to add item to cart.'));
       return false;
     }
   }, []);
@@ -553,8 +529,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
       return true;
     } catch (error: any) {
-      console.log('updateCartQty error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to update cart item.'));
+      logError('updateCartQty error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to update cart item.'));
       return false;
     }
   }, []);
@@ -567,8 +543,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showSuccess('Item removed from cart.');
       return true;
     } catch (error: any) {
-      console.log('removeCartItem error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to remove item from cart.'));
+      logError('removeCartItem error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to remove item from cart.'));
       return false;
     }
   }, []);
@@ -590,18 +566,14 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setWishlistItems(Array.isArray(nextWishlistItems) ? nextWishlistItems : []);
       return true;
     } catch (error: any) {
-      console.log('toggleWishlist error:', error?.response?.data || error?.message);
-      showError(getApiErrorMessage(error, 'Failed to update wishlist.'));
+      logError('toggleWishlist error:', error?.response?.data || error?.message);
+      showError(getErrorMessage(error, 'Failed to update wishlist.'));
       return false;
     }
   }, []);
 
   const checkout = useCallback(
-    async ({
-      address_id,
-      delivery_option,
-      pickup_station_id,
-    }: CheckoutOrderPayload) => {
+    async ({ address_id }: { address_id: number }) => {
       if (!cartItems.length) {
         throw new Error('Your cart is empty.');
       }
@@ -617,6 +589,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       const response = await orderApi.checkout({
         address_id,
+        payment_method,
         description: 'Placed from mobile app',
         delivery_option,
         pickup_station_id,
@@ -658,7 +631,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       return true;
     } catch (error: any) {
-      console.log('markNotificationRead error:', error?.response?.data || error?.message);
+      logError('markNotificationRead error:', error?.response?.data || error?.message);
       showError('Failed to mark notification as read.');
       return false;
     } finally {
@@ -685,7 +658,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showSuccess('All notifications marked as read.');
       return true;
     } catch (error: any) {
-      console.log('markAllNotificationsRead error:', error?.response?.data || error?.message);
+      logError('markAllNotificationsRead error:', error?.response?.data || error?.message);
       showError('Failed to mark all notifications as read.');
       return false;
     } finally {
