@@ -7,13 +7,17 @@ import type {
   Cart,
   CartItem,
   Category,
+  CheckoutOrderPayload,
+  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
+  DeliveryOption,
   ListResponse,
   Notification,
   Order,
   OrderItem,
   PaginatedResponse,
+  PickupStation,
   Product,
   ProductRating,
   Review,
@@ -506,12 +510,9 @@ export const orderApi = {
     }
   },
 
-  async checkout(payload: {
-    address_id: number;
-    description?: string;
-  }) {
+  async checkout(payload: CheckoutOrderPayload) {
     try {
-      const { data } = await api.post<Order>('/orders/checkout/', payload);
+      const { data } = await api.post<CheckoutResponse>('/orders/checkout/', payload);
       return data;
     } catch (error: any) {
       console.log('POST /orders/checkout/ error:', error?.response?.data || error.message);
@@ -747,6 +748,23 @@ export const addressApi = {
 
 };
 
+export const shippingApi = {
+  async listPickupStations() {
+    try {
+      const { data } = await api.get<PickupStation[] | { results: PickupStation[] }>(
+        '/pickup-stations/'
+      );
+      return normalizeList(data);
+    } catch (error: any) {
+      console.log(
+        'GET /pickup-stations/ error:',
+        error?.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+};
+
 // paymentApi
 export type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
 
@@ -768,6 +786,9 @@ export interface CreatePaymentPayload {
 export interface InitiateMTNPayload {
   address_id: number;
   phone_number: string;
+  delivery_option?: DeliveryOption;
+  pickup_station_id?: number | null;
+  coupon_code?: string;
 }
 
 export interface InitiateMTNResponse {

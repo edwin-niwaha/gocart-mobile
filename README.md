@@ -90,3 +90,7 @@ This app expects the same endpoints used by your Next.js app:
 - connect coupon validation before placing order
 - connect payments endpoint before marking orders paid
 - add push notifications from Django for status updates
+
+- Builds
+eas build -p android
+eas build -p ios

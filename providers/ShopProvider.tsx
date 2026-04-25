@@ -11,6 +11,8 @@ import {
 import type {
   CartItem,
   Category,
+  CheckoutOrderPayload,
+  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
   Notification,
@@ -76,7 +78,7 @@ type ShopContextType = {
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
-  checkout: (payload: { address_id: number }) => Promise<Order>;
+  checkout: (payload: CheckoutOrderPayload) => Promise<CheckoutResponse>;
   markNotificationRead: (id: number) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
   markingNotificationIds: number[];
@@ -595,7 +597,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkout = useCallback(
-    async ({ address_id }: { address_id: number }) => {
+    async ({
+      address_id,
+      delivery_option,
+      pickup_station_id,
+    }: CheckoutOrderPayload) => {
       if (!cartItems.length) {
         throw new Error('Your cart is empty.');
       }
@@ -609,9 +615,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Selected address was not found.');
       }
 
-      const order = await orderApi.checkout({
+      const response = await orderApi.checkout({
         address_id,
         description: 'Placed from mobile app',
+        delivery_option,
+        pickup_station_id,
       });
 
       const [nextOrders, nextCartItems] = await Promise.all([
@@ -622,8 +630,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       applyOrdersResponse(nextOrders, 'replace');
       setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
 
-      showSuccess('Checkout completed successfully.');
-      return order;
+      return response;
     },
     [addresses, applyOrdersResponse, cartItems]
   );

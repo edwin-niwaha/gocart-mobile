@@ -54,7 +54,6 @@ export default function ForgotPasswordScreen() {
       <Stack.Screen
         options={{
           title: 'Forgot Password',
-          headerBackTitleVisible: false,
         }}
       />
 

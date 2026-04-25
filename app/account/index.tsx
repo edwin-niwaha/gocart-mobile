@@ -111,7 +111,6 @@ export default function SettingsScreen() {
       <Stack.Screen
         options={{
           title: 'Settings',
-          headerBackTitleVisible: false,
         }}
       />
 

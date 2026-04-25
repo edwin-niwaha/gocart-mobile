@@ -171,12 +171,20 @@ export type OrderStatus =
   | 'cancelled'
   | 'completed';
 
+export type DeliveryOption = 'HOME_DELIVERY' | 'PICKUP_STATION';
+
 export type Order = {
   id: number;
   slug: string;
   status?: OrderStatus | string;
+  delivery_option?: DeliveryOption;
   description?: string;
+  items_subtotal?: string | number;
+  discount_amount?: string | number;
+  shipping_fee?: string | number;
   total_price?: string | number;
+  pickup_station_id?: number | null;
+  pickup_station_name?: string;
   items?: OrderItem[];
   created_at?: string;
   updated_at?: string;
@@ -184,6 +192,20 @@ export type Order = {
 
 export type OrderListResponse = ListResponse<Order>;
 export type PaginatedOrderResponse = PaginatedResponse<Order>;
+
+export type CheckoutOrderPayload = {
+  address_id: number;
+  description?: string;
+  delivery_option?: DeliveryOption;
+  pickup_station_id?: number | null;
+};
+
+export type CheckoutResponse = {
+  order: Order;
+  payment_reference: string;
+  payment_status: string;
+  payment_provider: string;
+};
 
 export type CreateOrderPayload = {
   slug: string;
@@ -264,6 +286,20 @@ export type CustomerAddress = {
   is_default: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type PickupStation = {
+  id: number;
+  name: string;
+  city: string;
+  area: string;
+  address: string;
+  phone?: string | null;
+  opening_hours?: string | null;
+  fee: string | number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type CreateCustomerAddressPayload = {

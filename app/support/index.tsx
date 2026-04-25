@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   infoCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: spacing.md,
     borderWidth: 1,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   secondaryButton: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border ?? '#E5E7EB',
     borderRadius: 14,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   },
 
   formCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: spacing.md,
     borderWidth: 1,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   mapCard: {
-    backgroundColor: colors.card ?? '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: spacing.lg,
     borderWidth: 1,

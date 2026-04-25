@@ -187,7 +187,6 @@ export default function RegisterScreen() {
       <Stack.Screen
         options={{
           title: 'Register',
-          headerBackTitleVisible: false,
         }}
       />
 

@@ -48,14 +48,17 @@ export default function CartScreen() {
             <CartRow
               key={item.id}
               item={item}
-              canDecrease={canDecrease}
-              onMinus={
-                canDecrease
-                  ? () => updateCartQty(item.id, item.quantity - 1)
-                  : undefined
-              }
-              onPlus={() => updateCartQty(item.id, item.quantity + 1)}
-              onRemove={() => removeCartItem(item.id)}
+              onMinus={() => {
+                if (canDecrease) {
+                  void updateCartQty(item.id, item.quantity - 1);
+                }
+              }}
+              onPlus={() => {
+                void updateCartQty(item.id, item.quantity + 1);
+              }}
+              onRemove={() => {
+                void removeCartItem(item.id);
+              }}
             />
           );
         })}

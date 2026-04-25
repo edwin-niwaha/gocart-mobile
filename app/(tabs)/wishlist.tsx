@@ -44,7 +44,7 @@ export default function WishlistScreen() {
 
     return wishlistItems.filter((item) => {
       const product = item.product;
-      const name = product?.name?.toLowerCase?.() || '';
+      const name = product?.title?.toLowerCase?.() || '';
       const slug = product?.slug?.toLowerCase?.() || '';
       const description = product?.description?.toLowerCase?.() || '';
 

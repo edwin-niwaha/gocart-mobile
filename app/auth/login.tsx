@@ -137,7 +137,6 @@ export default function LoginScreen() {
       <Stack.Screen
         options={{
           title: 'Login',
-          headerBackTitleVisible: false,
         }}
       />
 

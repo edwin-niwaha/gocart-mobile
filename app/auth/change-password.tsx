@@ -129,7 +129,6 @@ export default function ChangePasswordScreen() {
       <Stack.Screen
         options={{
           title: 'Change Password',
-          headerBackTitleVisible: false,
         }}
       />
 
