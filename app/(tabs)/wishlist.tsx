@@ -31,7 +31,11 @@ export default function WishlistScreen() {
     }
 
     if (activeVariants.length === 1) {
-      await addToCart(activeVariants[0].id, 1);
+      await addToCart({
+        product,
+        variant: activeVariants[0],
+        quantity: 1,
+      });
       return;
     }
 

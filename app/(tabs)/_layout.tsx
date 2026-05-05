@@ -1,50 +1,48 @@
-import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { colors } from '@/constants/theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { HeaderIconButton, HeaderTitle } from '@/components/AppHeader';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 
-function HeaderCartButton({ count }: { count: number }) {
+function TabBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+
   return (
-    <Pressable onPress={() => router.push('/cart')} style={styles.headerCartBtn}>
-      <Ionicons name="cart-outline" size={22} color={colors.text} />
-      {count > 0 ? (
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>
-            {count > 99 ? '99+' : count}
-          </Text>
-        </View>
-      ) : null}
-    </Pressable>
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
   );
 }
 
-function HeaderTitle({
-  icon,
-  title,
-  subtitle,
+function TabIcon({
+  name,
+  color,
+  size,
+  count = 0,
+  focused = false,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle: string;
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  size: number;
+  count?: number;
+  focused?: boolean;
 }) {
   return (
-    <View style={styles.brandWrap}>
-      <View style={styles.logoBadge}>
-        <Ionicons name={icon} size={16} color="#fff" />
-      </View>
-
-      <View>
-        <Text style={styles.brandTitle}>{title}</Text>
-        <Text style={styles.brandSlogan}>{subtitle}</Text>
-      </View>
+    <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+      <Ionicons name={name} color={color} size={size} />
+      <TabBadge count={count} />
     </View>
   );
 }
 
 export default function TabLayout() {
-  const { cartItems = [], 
-    orders = [], 
+  const insets = useSafeAreaInsets();
+  const {
+    cartItems = [],
+    orders = [],
     totalOrders = 0,
     wishlistItems = [],
   } = useShop();
@@ -53,21 +51,33 @@ export default function TabLayout() {
     (sum, item) => sum + Number(item.quantity || 0),
     0
   );
-
-  const visibleOrdersCount = orders.length;
   const wishlistCount = wishlistItems.length;
+  const visibleOrdersCount = orders.length;
+  const tabBarBottom = Math.max(insets.bottom, spacing.md);
+
+  const cartButton = () => (
+    <HeaderIconButton
+      icon="cart-outline"
+      badgeCount={cartCount}
+      accessibilityLabel="Open cart"
+      onPress={() => router.push('/cart')}
+    />
+  );
+
   return (
     <Tabs
       screenOptions={{
         headerTitleAlign: 'left',
         headerShadowVisible: false,
-        headerStyle: {
-          backgroundColor: '#fff',
-        },
-        headerTitleStyle: {
-          fontWeight: '700',
-        },
-        tabBarActiveTintColor: colors.primary,
+        headerStyle: styles.header,
+        headerBackgroundContainerStyle: styles.headerBackground,
+        tabBarActiveTintColor: colors.surface,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarStyle: [styles.tabBar, { bottom: tabBarBottom }],
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarActiveBackgroundColor: colors.primary,
+        tabBarInactiveBackgroundColor: colors.surface,
+        tabBarItemStyle: styles.tabBarItem,
       }}
     >
       <Tabs.Screen
@@ -78,12 +88,13 @@ export default function TabLayout() {
             <HeaderTitle
               icon="bag-handle"
               title="GoCart"
-              subtitle="Everything you need, delivered"
+              subtitle="Fresh picks and fast checkout"
+              tone="primary"
             />
           ),
-          headerRight: () => <HeaderCartButton count={cartCount} />,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="home" color={color} size={size} />
+          headerRight: cartButton,
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={focused ? 'home' : 'home-outline'} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -91,17 +102,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="categories"
         options={{
-          title: 'Categories',
+          title: 'Category',
           headerTitle: () => (
             <HeaderTitle
               icon="grid"
               title="Categories"
-              subtitle="Browse by collection"
+              subtitle="Browse smart collections"
+              tone="accent"
             />
           ),
-          headerRight: () => <HeaderCartButton count={cartCount} />,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="th-large" color={color} size={size} />
+          headerRight: cartButton,
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={focused ? 'grid' : 'grid-outline'} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -110,31 +122,26 @@ export default function TabLayout() {
         name="cart"
         options={{
           title: 'Cart',
-
           headerTitle: () => (
             <HeaderTitle
               icon="cart"
               title="My Cart"
-              subtitle={`${
+              subtitle={
                 cartCount === 0
-                  ? 'Your cart is empty'
-                  : `${cartCount} item${cartCount === 1 ? '' : 's'}`
-              }`}
+                  ? 'Ready for your next find'
+                  : `${cartCount} item${cartCount === 1 ? '' : 's'} selected`
+              }
+              tone="dark"
             />
           ),
-
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconWrapper}>
-              <FontAwesome name="shopping-cart" color={color} size={size} />
-
-              {cartCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {cartCount > 99 ? '99+' : cartCount}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon
+              name={focused ? 'cart' : 'cart-outline'}
+              color={color}
+              size={size}
+              count={cartCount}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -142,7 +149,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="orders"
         options={{
-          title: 'Orders',
+          title: 'Order',
           headerTitle: () => (
             <HeaderTitle
               icon="receipt"
@@ -150,11 +157,12 @@ export default function TabLayout() {
               subtitle={`${visibleOrdersCount} of ${totalOrders} order${
                 totalOrders === 1 ? '' : 's'
               }`}
+              tone="primary"
             />
           ),
-          headerRight: () => <HeaderCartButton count={cartCount} />,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="shopping-bag" color={color} size={size} />
+          headerRight: cartButton,
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={focused ? 'receipt' : 'receipt-outline'} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -163,53 +171,48 @@ export default function TabLayout() {
         name="wishlist"
         options={{
           title: 'Wishlist',
-
           headerTitle: () => (
             <HeaderTitle
               icon="heart"
-              title="My Wishlist"
-              subtitle={`${
+              title="Wishlist"
+              subtitle={
                 wishlistCount === 0
-                  ? 'No saved items'
+                  ? 'Save products you love'
                   : `${wishlistCount} saved item${
                       wishlistCount === 1 ? '' : 's'
                     }`
-              }`}
+              }
+              tone="accent"
             />
           ),
-
-          headerRight: () => <HeaderCartButton count={cartCount} />,
-
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconWrapper}>
-              <FontAwesome name="heart" color={color} size={size} />
-
-              {wishlistCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {wishlistCount > 99 ? '99+' : wishlistCount}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+          headerRight: cartButton,
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon
+              name={focused ? 'heart' : 'heart-outline'}
+              color={color}
+              size={size}
+              count={wishlistCount}
+              focused={focused}
+            />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="profile"
+        name="me"
         options={{
           title: 'Profile',
           headerTitle: () => (
             <HeaderTitle
               icon="person"
-              title="My Profile"
-              subtitle="Account & preferences"
+              title="Profile"
+              subtitle="Account and preferences"
+              tone="dark"
             />
           ),
-          headerRight: () => <HeaderCartButton count={cartCount} />,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="user" color={color} size={size} />
+          headerRight: cartButton,
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={focused ? 'person' : 'person-outline'} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -218,95 +221,67 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  brandWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  header: {
+    height: 94,
+    backgroundColor: colors.background,
   },
-
-  logoBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+  headerBackground: {
+    backgroundColor: colors.background,
   },
-
-  brandTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
-    letterSpacing: 0.2,
-  },
-
-  brandSlogan: {
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 1,
-    fontWeight: '500',
-  },
-
-  headerCartBtn: {
-    marginRight: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: '#F8F8F8',
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-
-  headerBadge: {
+  tabBar: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+    left: spacing.sm,
+    right: spacing.sm,
+    height: 74,
+    paddingHorizontal: 6,
+    paddingTop: 7,
+    paddingBottom: 8,
+    borderTopWidth: 0,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
-
-  headerBadgeText: {
-    color: '#fff',
+  tabBarItem: {
+    marginHorizontal: 2,
+    borderRadius: radii.md,
+    paddingVertical: 4,
+  },
+  tabBarLabel: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
+    marginTop: 1,
+    lineHeight: 12,
   },
-
   iconWrapper: {
-    width: 26,
-    height: 26,
+    width: 38,
+    height: 30,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
+  iconWrapperActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    transform: [{ translateY: -2 }],
+  },
   badge: {
     position: 'absolute',
-    top: -5,
-    right: -10,
-    backgroundColor: colors.primary,
-    borderRadius: 9,
+    top: -7,
+    right: -12,
     minWidth: 18,
     height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    borderWidth: 2,
+    borderColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
   },
-
   badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
+    color: colors.surface,
+    fontSize: 9,
+    fontWeight: '900',
   },
 });

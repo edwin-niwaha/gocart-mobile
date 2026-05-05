@@ -1,4 +1,11 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   addressApi,
   catalogApi,
@@ -14,17 +21,36 @@ import type {
   CartItem,
   Category,
   CheckoutOrderPayload,
-  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
   Notification,
   Order,
   Product,
+  ProductVariant,
   Review,
   WishlistItem,
 } from '@/types';
 import { useAuth } from '@/providers/AuthProvider';
 import { showError, showInfo, showSuccess } from '@/utils/toast';
+import {
+  addGuestCartItem,
+  clearGuestCart,
+  isGuestCartItemId,
+  listGuestCartItems,
+  listGuestCartSyncItems,
+  removeGuestCartItem,
+  retainGuestCartItems,
+  updateGuestCartItem,
+} from '@/utils/guestCart';
+
+type AddToCartInput =
+  | number
+  | {
+      product: Product;
+      variant?: ProductVariant;
+      variantId?: number;
+      quantity?: number;
+    };
 
 type PaginatedResponse<T> = {
   count: number;
@@ -76,11 +102,14 @@ type ShopContextType = {
       comment: string;
     }>
   ) => Promise<boolean>;
-  addToCart: (variantId: number, quantity?: number) => Promise<boolean>;
+  addToCart: (input: AddToCartInput, quantity?: number) => Promise<boolean>;
   updateCartQty: (itemId: number, quantity: number) => Promise<boolean>;
   removeCartItem: (itemId: number) => Promise<boolean>;
   toggleWishlist: (productId: number) => Promise<boolean>;
-  checkout: (payload: { address_id: number }) => Promise<Order>;
+  checkout: (
+    payload: CheckoutOrderPayload,
+    options?: { idempotencyKey?: string }
+  ) => Promise<Order>;
   markNotificationRead: (id: number) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
   markingNotificationIds: number[];
@@ -190,13 +219,18 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetAuthedState = useCallback(() => {
-    setCartItems([]);
     setWishlistItems([]);
     setReviews([]);
     setAddresses([]);
     resetOrdersState();
     resetNotificationsState();
   }, [resetNotificationsState, resetOrdersState]);
+
+  const loadGuestCartItems = useCallback(async () => {
+    const guestItems = await listGuestCartItems();
+    setCartItems(guestItems);
+    return guestItems;
+  }, []);
 
   const applyOrdersResponse = useCallback(
     (response: unknown, mode: 'replace' | 'append' = 'replace') => {
@@ -365,14 +399,44 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     nextNotificationsUrl,
   ]);
 
+  const syncGuestCartToServer = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    const pendingItems = await listGuestCartSyncItems();
+    if (!pendingItems.length) return;
+
+    const failedIds: number[] = [];
+
+    for (const item of pendingItems) {
+      try {
+        await cartApi.addItem({
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+        });
+      } catch {
+        failedIds.push(item.id);
+      }
+    }
+
+    if (failedIds.length) {
+      await retainGuestCartItems(failedIds);
+      showInfo('Some saved cart items could not be synced.');
+    } else {
+      await clearGuestCart();
+      showSuccess('Saved cart items synced.');
+    }
+  }, [isAuthenticated]);
+
   const loadAuthedData = useCallback(async () => {
     if (!isAuthenticated) {
       resetAuthedState();
+      await loadGuestCartItems();
       return;
     }
 
     setLoading(true);
     try {
+      await syncGuestCartToServer();
       await Promise.allSettled([cartApi.ensure(), wishlistApi.ensure()]);
 
       const [
@@ -407,7 +471,59 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [applyNotificationsResponse, applyOrdersResponse, isAuthenticated, resetAuthedState]);
+  }, [
+    applyNotificationsResponse,
+    applyOrdersResponse,
+    isAuthenticated,
+    loadGuestCartItems,
+    resetAuthedState,
+    syncGuestCartToServer,
+  ]);
+
+  const resolveCartInput = useCallback(
+    (input: AddToCartInput, fallbackQuantity = 1) => {
+      if (typeof input !== 'number') {
+        const variant =
+          input.variant ??
+          input.product.variants?.find((item) => item.id === input.variantId);
+
+        return {
+          product: input.product,
+          quantity: input.quantity ?? fallbackQuantity,
+          variant,
+        };
+      }
+
+      for (const product of products) {
+        const variant = product.variants?.find((item) => item.id === input);
+        if (variant) {
+          return {
+            product,
+            quantity: fallbackQuantity,
+            variant,
+          };
+        }
+      }
+
+      return {
+        product: null,
+        quantity: fallbackQuantity,
+        variant: null,
+      };
+    },
+    [products]
+  );
+
+  const refreshCartItems = useCallback(async () => {
+    if (!isAuthenticated) {
+      return loadGuestCartItems();
+    }
+
+    const nextCartItems = await cartApi.listItems();
+    const normalized = Array.isArray(nextCartItems) ? nextCartItems : [];
+    setCartItems(normalized);
+    return normalized;
+  }, [isAuthenticated, loadGuestCartItems]);
 
   const reloadAddresses = useCallback(async () => {
     const nextAddresses = await addressApi.list();
@@ -497,15 +613,29 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const addToCart = useCallback(async (variantId: number, quantity = 1) => {
+  const addToCart = useCallback(async (input: AddToCartInput, quantity = 1) => {
     try {
-      await cartApi.addItem({
-        variant_id: variantId,
-        quantity,
-      });
+      const resolved = resolveCartInput(input, quantity);
 
-      const nextCartItems = await cartApi.listItems();
-      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      if (!resolved.product || !resolved.variant) {
+        throw new Error('Product details are required to add this item to cart.');
+      }
+
+      if (!isAuthenticated) {
+        await addGuestCartItem({
+          product: resolved.product,
+          quantity: resolved.quantity,
+          variant: resolved.variant,
+        });
+      } else {
+        await syncGuestCartToServer();
+        await cartApi.addItem({
+          variant_id: resolved.variant.id,
+          quantity: resolved.quantity,
+        });
+      }
+
+      await refreshCartItems();
       showSuccess('Product added to cart.');
       return true;
     } catch (error: any) {
@@ -513,33 +643,48 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showError(getErrorMessage(error, 'Failed to add item to cart.'));
       return false;
     }
-  }, []);
+  }, [
+    isAuthenticated,
+    refreshCartItems,
+    resolveCartInput,
+    syncGuestCartToServer,
+  ]);
 
   const updateCartQty = useCallback(async (itemId: number, quantity: number) => {
     try {
       if (quantity < 1) {
-        await cartApi.removeItem(itemId);
+        if (!isAuthenticated || isGuestCartItemId(itemId)) {
+          await removeGuestCartItem(itemId);
+        } else {
+          await cartApi.removeItem(itemId);
+        }
         showInfo('Item removed from cart.');
+      } else if (!isAuthenticated || isGuestCartItemId(itemId)) {
+        await updateGuestCartItem(itemId, quantity);
+        showSuccess('Cart updated.');
       } else {
         await cartApi.updateItem(itemId, { quantity });
         showSuccess('Cart updated.');
       }
 
-      const nextCartItems = await cartApi.listItems();
-      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      await refreshCartItems();
       return true;
     } catch (error: any) {
       logError('updateCartQty error:', error?.response?.data || error?.message);
       showError(getErrorMessage(error, 'Failed to update cart item.'));
       return false;
     }
-  }, []);
+  }, [isAuthenticated, refreshCartItems]);
 
   const removeCartItem = useCallback(async (itemId: number) => {
     try {
-      await cartApi.removeItem(itemId);
-      const nextCartItems = await cartApi.listItems();
-      setCartItems(Array.isArray(nextCartItems) ? nextCartItems : []);
+      if (!isAuthenticated || isGuestCartItemId(itemId)) {
+        await removeGuestCartItem(itemId);
+      } else {
+        await cartApi.removeItem(itemId);
+      }
+
+      await refreshCartItems();
       showSuccess('Item removed from cart.');
       return true;
     } catch (error: any) {
@@ -547,7 +692,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showError(getErrorMessage(error, 'Failed to remove item from cart.'));
       return false;
     }
-  }, []);
+  }, [isAuthenticated, refreshCartItems]);
 
   const toggleWishlist = useCallback(async (productId: number) => {
     try {
@@ -573,7 +718,16 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkout = useCallback(
-    async ({ address_id }: { address_id: number }) => {
+    async ({
+      address_id,
+      delivery_option = 'HOME_DELIVERY',
+      payment_method = 'CASH',
+      pickup_station_id = null,
+      coupon_code,
+      description,
+    }: CheckoutOrderPayload,
+    options?: { idempotencyKey?: string }
+  ) => {
       if (!cartItems.length) {
         throw new Error('Your cart is empty.');
       }
@@ -587,13 +741,18 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Selected address was not found.');
       }
 
-      const response = await orderApi.checkout({
-        address_id,
-        payment_method,
-        description: 'Placed from mobile app',
-        delivery_option,
-        pickup_station_id,
-      });
+      const response = await orderApi.checkout(
+        {
+          address_id,
+          payment_method,
+          description: description ?? 'Placed from mobile app',
+          delivery_option,
+          pickup_station_id:
+            delivery_option === 'PICKUP_STATION' ? pickup_station_id : null,
+          ...(coupon_code ? { coupon_code } : {}),
+        },
+        options
+      );
 
       const [nextOrders, nextCartItems] = await Promise.all([
         orderApi.list(),
@@ -607,6 +766,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     },
     [addresses, applyOrdersResponse, cartItems]
   );
+
+  useEffect(() => {
+    loadAuthedData().catch(() => undefined);
+  }, [loadAuthedData]);
 
   const markNotificationRead = useCallback(async (id: number) => {
     try {

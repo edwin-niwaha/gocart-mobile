@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
@@ -25,10 +26,43 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
 
   const errorTitle = options?.onErrorTitle || 'Google login failed';
   const onSuccess = options?.onSuccess;
-  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const hasGoogleClientIds = Boolean(androidClientId || iosClientId || webClientId);
+  const isNativeMobile = Platform.OS === 'android' || Platform.OS === 'ios';
+  const appEnv =
+    process.env.EXPO_PUBLIC_APP_ENV?.trim() ||
+    process.env.NODE_ENV ||
+    'development';
+  const isReleaseBuild = appEnv === 'production' || appEnv === 'staging';
+  const rawAndroidClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() || '';
+  const rawIosClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || '';
+  const webClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || '';
+  const androidClientId =
+    rawAndroidClientId || (!isReleaseBuild ? webClientId : '');
+  const iosClientId =
+    rawIosClientId || (!isReleaseBuild ? webClientId : '');
+  const platformClientId =
+    Platform.OS === 'android'
+      ? androidClientId
+      : Platform.OS === 'ios'
+        ? iosClientId
+        : webClientId;
+  const missingNativeClientId =
+    (Platform.OS === 'android' && !rawAndroidClientId) ||
+    (Platform.OS === 'ios' && !rawIosClientId);
+  const hasGoogleClientIds = Boolean(platformClientId);
+
+  useEffect(() => {
+    if (!isNativeMobile) return;
+
+    GoogleSignin.configure({
+      scopes: ['openid', 'profile', 'email'],
+      webClientId: webClientId || undefined,
+      iosClientId: rawIosClientId || undefined,
+      offlineAccess: false,
+    });
+  }, [isNativeMobile, rawIosClientId, webClientId]);
 
   const redirectUri = useMemo(
     () =>
@@ -95,10 +129,64 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
 
   const startGoogleAuth = async () => {
     try {
+      if (isNativeMobile) {
+        if (!webClientId) {
+          Alert.alert(
+            errorTitle,
+            'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Add the web OAuth client ID used by the backend before signing in with Google.'
+          );
+          return;
+        }
+
+        setGoogleLoading(true);
+
+        if (Platform.OS === 'android') {
+          await GoogleSignin.hasPlayServices({
+            showPlayServicesUpdateDialog: true,
+          });
+        }
+
+        const signInResponse = await GoogleSignin.signIn();
+
+        if (signInResponse.type === 'cancelled') {
+          setGoogleLoading(false);
+          return;
+        }
+
+        const tokens = await GoogleSignin.getTokens();
+        const accessToken = tokens.accessToken;
+
+        if (!accessToken) {
+          setGoogleLoading(false);
+          Alert.alert(errorTitle, 'Missing Google access token.');
+          return;
+        }
+
+        const signedInUser = await googleLogin(accessToken);
+        await loadAuthedData();
+
+        if (onSuccess) {
+          await onSuccess(signedInUser);
+        }
+
+        setGoogleLoading(false);
+        return;
+      }
+
       if (!hasGoogleClientIds) {
         Alert.alert(
           errorTitle,
-          'Google sign-in is not configured for this build.'
+          Platform.OS === 'android'
+            ? 'Missing EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID. Add an Android OAuth client ID for package com.gocart.mobile, or set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for local development.'
+            : 'Google sign-in is not configured for this build.'
+        );
+        return;
+      }
+
+      if (isReleaseBuild && missingNativeClientId) {
+        Alert.alert(
+          errorTitle,
+          'This release build is missing its native Google OAuth client ID.'
         );
         return;
       }
@@ -116,6 +204,14 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
     } catch (error: unknown) {
       setGoogleLoading(false);
 
+      const code = typeof error === 'object' && error && 'code' in error
+        ? String((error as { code?: string }).code)
+        : '';
+
+      if (code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
+
       logError('Google auth prompt failed.', error);
       Alert.alert(
         errorTitle,
@@ -127,7 +223,7 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
   return {
     googleLoading,
     startGoogleAuth,
-    googleReady: hasGoogleClientIds && !!request,
+    googleReady: isNativeMobile ? Boolean(webClientId) : hasGoogleClientIds && !!request,
     redirectUri,
   };
 }

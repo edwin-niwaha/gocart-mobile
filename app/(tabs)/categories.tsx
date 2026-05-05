@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { EmptyState } from '@/components/EmptyState';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
 import type { Product, ProductVariant } from '@/types';
@@ -56,6 +56,35 @@ function getInitialVariant(variants: ProductVariant[]) {
 function getActiveVariants(product: Product) {
   const source = product.variants?.filter((variant) => variant.is_active) || [];
   return dedupeVariants(source);
+}
+
+function CategoryThumb({
+  uri,
+  active,
+  size = 30,
+}: {
+  uri?: string | null;
+  active?: boolean;
+  size?: number;
+}) {
+  return (
+    <View
+      style={[
+        styles.categoryThumb,
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.32),
+        },
+        active && styles.categoryThumbActive,
+      ]}
+    >
+      <Image
+        source={{ uri: uri || FALLBACK_CATEGORY }}
+        style={styles.categoryThumbImage}
+      />
+    </View>
+  );
 }
 
 function getProductStockInfo(product: Product) {
@@ -195,15 +224,19 @@ export default function CategoriesScreen() {
 
     try {
       setAddingProductId(product.id);
-      await addToCart(selectedVariant.id, 1);
+      await addToCart({ product, variant: selectedVariant, quantity: 1 });
     } finally {
       setAddingProductId(null);
     }
   };
 
-  const sidebarWidth = 96;
-  const contentWidth = width - sidebarWidth - 36;
-  const productCardWidth = Math.min(Math.max(contentWidth * 0.58, 150), 190);
+  const isWide = width >= 720;
+  const sidebarWidth = isWide ? 116 : 86;
+  const contentWidth = width - sidebarWidth - 34;
+  const productCardWidth = Math.min(Math.max(contentWidth * 0.6, 160), 210);
+  const totalCategoryProducts = selectedCategory
+    ? getCategoryCount(selectedCategory.slug)
+    : 0;
 
   if (!loading && !categories.length) {
     return (
@@ -217,7 +250,7 @@ export default function CategoriesScreen() {
   }
 
   return (
-    <Screen>
+    <Screen style={styles.screen} contentContainerStyle={styles.page}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -225,6 +258,19 @@ export default function CategoriesScreen() {
         }
       >
         <View style={styles.container}>
+          <View style={styles.header}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="grid-outline" size={21} color={colors.surface} />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.eyebrow}>Browse</Text>
+              <Text style={styles.headerTitle}>Categories</Text>
+              <Text style={styles.headerSubtitle}>
+                Find products faster by collection, stock, and variants.
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={18} color={colors.muted} />
 
@@ -261,9 +307,10 @@ export default function CategoriesScreen() {
                           active && styles.categoryItemActive,
                         ]}
                       >
-                        <Image
-                          source={{ uri: category.image_url || FALLBACK_CATEGORY }}
-                          style={styles.categoryImage}
+                        <CategoryThumb
+                          uri={category.image_url}
+                          active={active}
+                          size={active ? 32 : 28}
                         />
 
                         <Text
@@ -289,16 +336,25 @@ export default function CategoriesScreen() {
                 {selectedCategory ? (
                   <>
                     <View style={styles.hero}>
-                      <Image
-                        source={{ uri: selectedCategory.image_url || FALLBACK_CATEGORY }}
-                        style={styles.heroImage}
-                      />
-                      <View style={styles.heroOverlay} />
-
                       <View style={styles.heroContent}>
-                        <Text style={styles.heroTitle}>{selectedCategory.name}</Text>
-                        <Text style={styles.heroSubtext}>
-                          {categoryProducts.length} products
+                        <CategoryThumb
+                          uri={selectedCategory.image_url}
+                          active
+                          size={36}
+                        />
+                        <View style={styles.heroTextBlock}>
+                          <Text style={styles.heroTitle} numberOfLines={1}>
+                            {selectedCategory.name}
+                          </Text>
+                          <Text style={styles.heroSubtext}>
+                            {categoryProducts.length} shown of {totalCategoryProducts}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.heroBadge}>
+                        <Text style={styles.heroBadgeText}>
+                          {filteredCategories.length} collections
                         </Text>
                       </View>
                     </View>
@@ -418,9 +474,7 @@ export default function CategoriesScreen() {
                                   disabled={isOutOfStock || isAdding}
                                   onPress={(e) => {
                                     e.stopPropagation();
-                                    protectedAction(async () => {
-                                      await handleAddToCart(product);
-                                    });
+                                    handleAddToCart(product);
                                   }}
                                 >
                                   {isAdding ? (
@@ -476,9 +530,62 @@ export default function CategoriesScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: '#F3F6F8',
+  },
+  page: {
+    backgroundColor: '#F3F6F8',
+  },
   container: {
-    paddingBottom: spacing.xl,
+    paddingBottom: 120,
     gap: spacing.md,
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: '#DDE8E4',
+    backgroundColor: '#173B35',
+    padding: spacing.md,
+    ...shadows.card,
+  },
+
+  headerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#A7F3D0',
+    textTransform: 'uppercase',
+  },
+
+  headerTitle: {
+    marginTop: 2,
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.surface,
+  },
+
+  headerSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#D6E4DF',
   },
 
   searchBox: {
@@ -487,10 +594,11 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 44,
     paddingHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    ...shadows.soft,
   },
 
   searchInput: {
@@ -507,41 +615,55 @@ const styles = StyleSheet.create({
   },
 
   sidebar: {
-    width: 96,
-    borderRadius: 16,
+    width: 86,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
     alignSelf: 'flex-start',
+    ...shadows.soft,
   },
 
   categoryItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    minHeight: 72,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
 
   categoryItemActive: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#EAF6F1',
   },
 
-  categoryImage: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    marginBottom: 6,
+  categoryThumb: {
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 4,
+  },
+
+  categoryThumbActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+
+  categoryThumbImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
 
   categoryName: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '900',
     color: colors.text,
     textAlign: 'center',
+    lineHeight: 12,
   },
 
   categoryNameActive: {
@@ -549,9 +671,9 @@ const styles = StyleSheet.create({
   },
 
   categoryMeta: {
-    fontSize: 10,
+    fontSize: 9,
     color: colors.muted,
-    marginTop: 2,
+    marginTop: 1,
     textAlign: 'center',
   },
 
@@ -562,38 +684,53 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    height: 110,
-    borderRadius: 16,
+    minHeight: 86,
+    borderRadius: radii.lg,
     overflow: 'hidden',
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'flex-end',
-  },
-
-  heroImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadows.soft,
   },
 
   heroContent: {
-    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+
+  heroTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
   heroTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+    color: colors.text,
   },
 
   heroSubtext: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.9)',
+    color: colors.muted,
     marginTop: 2,
+    fontWeight: '700',
+  },
+
+  heroBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primaryDark,
   },
 
   productsRow: {
@@ -604,11 +741,12 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: radii.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#ECECEC',
     alignSelf: 'flex-start',
+    ...shadows.soft,
   },
 
   imageWrapper: {
@@ -703,14 +841,14 @@ const styles = StyleSheet.create({
   },
 
   cartButton: {
-    marginTop: 8,
-    minHeight: 36,
-    borderRadius: 10,
+    marginTop: 6,
+    minHeight: 32,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 6,
-    backgroundColor: colors.primary,
+    gap: 5,
+    backgroundColor: colors.ink,
   },
 
   cartBtnDisabled: {
@@ -718,8 +856,8 @@ const styles = StyleSheet.create({
   },
 
   cartButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: '#fff',
   },
 });

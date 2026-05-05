@@ -197,7 +197,9 @@ export type CheckoutOrderPayload = {
   address_id: number;
   description?: string;
   delivery_option?: DeliveryOption;
+  payment_method?: 'CASH' | 'MTN' | 'CARD' | string;
   pickup_station_id?: number | null;
+  coupon_code?: string;
 };
 
 export type CheckoutResponse = {
@@ -279,6 +281,7 @@ export type CustomerAddress = {
   id: number;
   street_name: string;
   city: string;
+  area?: string | null;
   phone_number?: string | null;
   additional_telephone?: string | null;
   additional_information?: string | null;
@@ -305,6 +308,7 @@ export type PickupStation = {
 export type CreateCustomerAddressPayload = {
   street_name: string;
   city: string;
+  area?: string;
   phone_number?: string;
   additional_telephone?: string;
   additional_information?: string;

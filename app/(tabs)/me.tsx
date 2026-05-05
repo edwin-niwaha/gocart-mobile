@@ -1,39 +1,26 @@
 import React, { useEffect, useMemo } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, type Href } from 'expo-router';
-import {
-  Image,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AuthGate } from '@/components/AuthGate';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { useShop } from '@/providers/ShopProvider';
 import { fullName } from '@/utils/format';
 
-type MenuRowProps = {
-  label: string;
-  icon: string;
-  href?: Href;
-  onPress?: () => void;
-  danger?: boolean;
-  noBorder?: boolean;
-};
+type IconName = keyof typeof Ionicons.glyphMap;
 
 type QuickActionItem = {
   href: Href;
-  icon: string;
+  icon: IconName;
   label: string;
   count?: number;
 };
 
 type SupportActionProps = {
-  icon: string;
+  icon: IconName;
   label: string;
   onPress: () => void;
   variant?: 'primary' | 'default';
@@ -67,23 +54,15 @@ function StatItem({ value, label }: { value: number | string; label: string }) {
   );
 }
 
-function IconTile({
-  href,
-  icon,
-  label,
-  count,
-}: QuickActionItem) {
+function QuickActionTile({ href, icon, label, count }: QuickActionItem) {
   return (
     <Link href={href} asChild>
-      <Pressable style={({ pressed }) => [styles.iconTile, pressed && styles.pressed]}>
-        <View style={styles.iconTileWrap}>
-          <View style={styles.iconTileCircle}>
-            <Text style={styles.iconTileEmoji}>{icon}</Text>
-          </View>
+      <Pressable style={({ pressed }) => [styles.quickTile, pressed && styles.pressed]}>
+        <View style={styles.quickIconWrap}>
+          <Ionicons name={icon} size={22} color={colors.primary} />
           {typeof count === 'number' ? <CountBadge count={count} /> : null}
         </View>
-
-        <Text style={styles.iconTileLabel} numberOfLines={1}>
+        <Text style={styles.quickLabel} numberOfLines={1}>
           {label}
         </Text>
       </Pressable>
@@ -91,26 +70,7 @@ function IconTile({
   );
 }
 
-function QuickActionsGrid({ items }: { items: QuickActionItem[] }) {
-  return (
-    <View style={styles.quickActionsCard}>
-      {items.map((item) => (
-        <IconTile
-          key={`${item.label}-${typeof item.href === 'string' ? item.href : item.href.pathname}`}
-          {...item}
-        />
-      ))}
-    </View>
-  );
-}
-
-function StatusPill({
-  label,
-  muted,
-}: {
-  label: string;
-  muted?: boolean;
-}) {
+function StatusPill({ label, muted }: { label: string; muted?: boolean }) {
   return (
     <View style={[styles.statusPill, muted && styles.statusPillMuted]}>
       <View style={[styles.statusDot, muted && styles.statusDotMuted]} />
@@ -118,42 +78,6 @@ function StatusPill({
         {label}
       </Text>
     </View>
-  );
-}
-
-function MenuRow({
-  label,
-  icon,
-  href,
-  onPress,
-  danger,
-  noBorder,
-}: MenuRowProps) {
-  const content = (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.menuRow,
-        !noBorder && styles.menuRowBorder,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={[styles.menuIconWrap, danger && styles.menuIconWrapDanger]}>
-        <Text style={styles.menuIcon}>{icon}</Text>
-      </View>
-
-      <Text style={[styles.menuLabel, danger && styles.dangerText]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-
-  return href ? (
-    <Link href={href} asChild>
-      {content}
-    </Link>
-  ) : (
-    content
   );
 }
 
@@ -174,8 +98,19 @@ function SupportAction({
         pressed && styles.pressed,
       ]}
     >
-      <Text style={styles.supportButtonIcon}>{icon}</Text>
-      <Text style={styles.supportButtonLabel}>{label}</Text>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={isPrimary ? colors.surface : colors.primaryDark}
+      />
+      <Text
+        style={[
+          styles.supportButtonLabel,
+          isPrimary && styles.supportButtonLabelPrimary,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -187,9 +122,12 @@ function InboxPreview({ unreadCount }: { unreadCount: number }) {
         <View style={styles.inboxRow}>
           <View style={styles.inboxLeft}>
             <View style={styles.inboxIconWrap}>
-              <Text style={styles.inboxIcon}>📬</Text>
+              <Ionicons
+                name="mail-unread-outline"
+                size={20}
+                color={colors.primary}
+              />
             </View>
-
             <View style={styles.inboxTextWrap}>
               <Text style={styles.inboxTitle}>Unread notifications</Text>
               <Text style={styles.inboxSubtitle} numberOfLines={2}>
@@ -198,7 +136,6 @@ function InboxPreview({ unreadCount }: { unreadCount: number }) {
               </Text>
             </View>
           </View>
-
           <View style={styles.inboxCountWrap}>
             <Text style={styles.inboxCountText}>
               {unreadCount > 99 ? '99+' : unreadCount}
@@ -256,11 +193,21 @@ export default function ProfileScreen() {
 
   const quickActions = useMemo<QuickActionItem[]>(
     () => [
-      { href: '/orders', icon: '📦', label: 'Orders', count: orders.length },
-      { href: '/notifications', icon: '📬', label: 'Inbox', count: unreadCount },
-      { href: '/orders', icon: '⭐', label: 'Ratings', count: reviews.length },
-      { href: '/addresses', icon: '📍', label: 'Addresses', count: addresses.length },
-      { href: '/account', icon: '⚙️', label: 'Settings' },
+      { href: '/orders', icon: 'cube-outline', label: 'Orders', count: orders.length },
+      {
+        href: '/notifications',
+        icon: 'mail-unread-outline',
+        label: 'Inbox',
+        count: unreadCount,
+      },
+      { href: '/orders', icon: 'star-outline', label: 'Ratings', count: reviews.length },
+      {
+        href: '/addresses',
+        icon: 'location-outline',
+        label: 'Addresses',
+        count: addresses.length,
+      },
+      { href: '/account', icon: 'settings-outline', label: 'Settings' },
     ],
     [orders.length, unreadCount, reviews.length, addresses.length]
   );
@@ -276,41 +223,45 @@ export default function ProfileScreen() {
   };
 
   return (
-    <Screen scroll contentContainerStyle={styles.page}>
-      <View style={styles.heroCard}>
-        <View style={styles.heroBackgroundShape} />
+    <Screen scroll style={styles.screen} contentContainerStyle={styles.page}>
+      <View style={styles.hero}>
+        <View style={styles.profileTopRow}>
+          <View style={styles.profileRow}>
+            <View style={styles.avatarRing}>
+              <View style={styles.avatar}>
+                {user?.avatar_url ? (
+                  <Image
+                    source={{ uri: user.avatar_url }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
+              </View>
+            </View>
 
-        <View style={styles.heroHeader}>
-          <View style={styles.avatarRing}>
-            <View style={styles.avatar}>
-              {user?.avatar_url ? (
-                <Image
-                  source={{ uri: user.avatar_url }}
-                  style={styles.avatarImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Text style={styles.avatarText}>{initials}</Text>
-              )}
+            <View style={styles.profileIdentity}>
+              <Text style={styles.heroEyebrow}>My Profile</Text>
+              <Text style={styles.heroTitle} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.heroSubtitle} numberOfLines={1}>
+                {user?.email || 'Guest checkout is available'}
+              </Text>
             </View>
           </View>
 
-          <View style={styles.heroInfo}>
-            <Text style={styles.heroName}>{displayName}</Text>
-            <Text style={styles.heroEmail}>{user?.email || 'Not signed in'}</Text>
-
-            <View style={styles.heroMetaRow}>
-              <StatusPill
-                label={isAuthenticated ? 'Standard Member' : 'Guest'}
-                muted={!isAuthenticated}
-              />
-
-              {isAuthenticated && unreadCount > 0 ? (
-                <View style={styles.unreadPill}>
-                  <Text style={styles.unreadPillText}>{unreadCount} unread</Text>
-                </View>
-              ) : null}
-            </View>
+          <View style={styles.profileMeta}>
+            <StatusPill
+              label={isAuthenticated ? 'Active Member' : 'Guest'}
+              muted={!isAuthenticated}
+            />
+            {isAuthenticated && unreadCount > 0 ? (
+              <View style={styles.unreadPill}>
+                <Text style={styles.unreadPillText}>{unreadCount} unread</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -326,337 +277,299 @@ export default function ProfileScreen() {
         ) : null}
       </View>
 
-      <View style={styles.body}>
-        <View style={styles.section}>
-          <SectionHeader title="Account" />
-          <AuthGate message="Log in to manage your orders, inbox, addresses, and account settings.">
-            <QuickActionsGrid items={quickActions} />
-          </AuthGate>
-        </View>
-
-        {isAuthenticated && unreadCount > 0 ? (
-          <View style={styles.section}>
-            <SectionHeader title="Inbox" />
-            <InboxPreview unreadCount={unreadCount} />
+      <View style={styles.section}>
+        <SectionHeader title="Account" />
+        <AuthGate message="Log in to manage your orders, inbox, addresses, and account settings.">
+          <View style={styles.quickActionsCard}>
+            {quickActions.map((item) => (
+              <QuickActionTile key={`${item.label}-${String(item.href)}`} {...item} />
+            ))}
           </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <SectionHeader title="Support" />
-          <View style={styles.supportRow}>
-            <SupportAction
-              icon="💬"
-              label="WhatsApp"
-              onPress={openWhatsApp}
-              variant="primary"
-            />
-            <SupportAction
-              icon="✉️"
-              label="Email Support"
-              onPress={openSupportEmail}
-            />
-          </View>
-        </View>
-
-        {isAuthenticated ? (
-          <View style={styles.section}>
-            <SectionHeader title="Session" />
-            <View style={styles.card}>
-              <MenuRow
-                icon="🚪"
-                label={loading ? 'Signing out…' : 'Logout'}
-                onPress={logout}
-                danger
-                noBorder
-              />
-            </View>
-          </View>
-        ) : null}
-
-        <Text style={styles.footer}>v1.0.0 · GoCart</Text>
+        </AuthGate>
       </View>
+
+      {isAuthenticated && unreadCount > 0 ? (
+        <View style={styles.section}>
+          <SectionHeader title="Inbox" />
+          <InboxPreview unreadCount={unreadCount} />
+        </View>
+      ) : null}
+
+      <View style={styles.section}>
+        <SectionHeader title="Support" />
+        <View style={styles.supportRow}>
+          <SupportAction
+            icon="logo-whatsapp"
+            label="WhatsApp"
+            onPress={openWhatsApp}
+            variant="primary"
+          />
+          <SupportAction
+            icon="mail-outline"
+            label="Email Support"
+            onPress={openSupportEmail}
+          />
+        </View>
+      </View>
+
+      {isAuthenticated ? (
+        <View style={styles.section}>
+          <SectionHeader title="Session" />
+          <Pressable
+            onPress={logout}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.logoutButton,
+              pressed && styles.pressed,
+              loading && styles.disabled,
+            ]}
+          >
+            <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+            <Text style={styles.logoutText}>
+              {loading ? 'Signing out...' : 'Logout'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Text style={styles.footer}>v1.0.0 - GoCart</Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: '#F3F6F8',
+  },
   page: {
-    backgroundColor: colors.background,
-    paddingBottom: spacing.lg,
-  },
-
-  body: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
     gap: spacing.md,
+    backgroundColor: '#F3F6F8',
   },
-
   section: {
     gap: spacing.xs,
   },
-
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    ...shadows.soft,
   },
-
   pressed: {
     opacity: 0.76,
   },
-
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    overflow: 'hidden',
+  disabled: {
+    opacity: 0.65,
   },
-
-  heroBackgroundShape: {
-    position: 'absolute',
-    top: -60,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: colors.primarySoft,
-  },
-
-  heroHeader: {
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    gap: spacing.md,
+    minWidth: 0,
+    flex: 1,
   },
-
+  hero: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+    backgroundColor: '#173B35',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: '#27554D',
+    ...shadows.card,
+  },
+  profileTopRow: {
+    gap: spacing.md,
+  },
   avatarRing: {
     padding: 3,
     borderRadius: 999,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: 'rgba(255,255,255,0.56)',
   },
-
   avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: colors.primarySoft,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 999,
   },
-
   avatarText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.primary,
+    fontSize: 23,
+    fontWeight: '900',
+    color: colors.primaryDark,
   },
-
-  heroInfo: {
+  profileIdentity: {
     flex: 1,
+    minWidth: 0,
+    gap: 3,
   },
-
-  heroName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.3,
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#A7F3D0',
+    textTransform: 'uppercase',
   },
-
-  heroEmail: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.surface,
   },
-
-  heroMetaRow: {
+  heroSubtitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#CBD5E1',
+  },
+  profileMeta: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.xs,
     flexWrap: 'wrap',
-    marginTop: 6,
   },
-
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     alignSelf: 'flex-start',
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.primary,
   },
-
   statusPillMuted: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: 'rgba(248,250,252,0.12)',
   },
-
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
     backgroundColor: colors.success,
   },
-
   statusDotMuted: {
-    backgroundColor: colors.muted,
+    backgroundColor: '#CBD5E1',
   },
-
   statusPillText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 0.3,
-  },
-
-  statusPillTextMuted: {
-    color: colors.muted,
-  },
-
-  unreadPill: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  unreadPillText: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 0.3,
+    color: colors.primaryDark,
   },
-
+  statusPillTextMuted: {
+    color: '#E2E8F0',
+  },
+  unreadPill: {
+    backgroundColor: 'rgba(247,148,32,0.16)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  unreadPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FDBA74',
+  },
   statsRow: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-
   statItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
   },
-
   statValue: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.surface,
   },
-
   statLabel: {
-    fontSize: 10.5,
-    color: colors.muted,
+    fontSize: 10,
+    color: '#CBD5E1',
     marginTop: 2,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '800',
   },
-
   statDivider: {
     width: 1,
-    backgroundColor: colors.border,
-    marginVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginVertical: spacing.sm,
   },
-
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
   },
-
   sectionTitle: {
     fontSize: 11,
-    fontWeight: '800',
-    color: colors.muted,
+    fontWeight: '900',
+    color: '#475569',
     textTransform: 'uppercase',
-    letterSpacing: 1.1,
   },
-
   sectionLine: {
     flex: 1,
     height: 1,
     backgroundColor: colors.border,
   },
-
   quickActionsCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.soft,
   },
-
-  iconTile: {
+  quickTile: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+    minWidth: 0,
   },
-
-  iconTileWrap: {
+  quickIconWrap: {
     position: 'relative',
-  },
-
-  iconTileCircle: {
     width: 50,
     height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.primarySoft,
+    borderRadius: radii.md,
+    backgroundColor: '#EAF6F1',
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  iconTileEmoji: {
-    fontSize: 20,
-  },
-
   countBadge: {
     position: 'absolute',
-    top: -4,
+    top: -5,
     right: -6,
-    minWidth: 18,
-    height: 18,
+    minWidth: 19,
+    height: 19,
     paddingHorizontal: 4,
     borderRadius: 999,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.surface,
   },
-
   countBadgeText: {
     color: colors.surface,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-
-  iconTileLabel: {
+  quickLabel: {
     fontSize: 10,
     textAlign: 'center',
-    color: colors.muted,
-    fontWeight: '600',
+    color: '#334155',
+    fontWeight: '900',
   },
-
   inboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -664,141 +577,98 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md,
   },
-
   inboxLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-
   inboxIconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 12,
+    borderRadius: radii.sm,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  inboxIcon: {
-    fontSize: 18,
-  },
-
   inboxTextWrap: {
     flex: 1,
     gap: 2,
   },
-
   inboxTitle: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.text,
   },
-
   inboxSubtitle: {
     fontSize: 12,
     color: colors.muted,
     lineHeight: 18,
   },
-
   inboxCountWrap: {
-    minWidth: 28,
-    height: 28,
+    minWidth: 30,
+    height: 30,
     borderRadius: 999,
     paddingHorizontal: 8,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   inboxCountText: {
     color: colors.surface,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-
   supportRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
-
   supportButton: {
     flex: 1,
     height: 64,
-    borderRadius: 14,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
     borderWidth: 1,
+    ...shadows.soft,
   },
-
   supportButtonPrimary: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
   },
-
   supportButtonDefault: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
-
-  supportButtonIcon: {
-    fontSize: 18,
-  },
-
   supportButtonLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '900',
     color: colors.text,
   },
-
-  menuRow: {
+  supportButtonLabelPrimary: {
+    color: colors.surface,
+  },
+  logoutButton: {
+    minHeight: 54,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-
-  menuRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-
-  menuIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.background,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.lg,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: `${colors.danger}33`,
   },
-
-  menuIconWrapDanger: {
-    backgroundColor: `${colors.danger}14`,
-  },
-
-  menuIcon: {
-    fontSize: 15,
-  },
-
-  menuLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-
-  dangerText: {
+  logoutText: {
     color: colors.danger,
+    fontSize: 14,
+    fontWeight: '900',
   },
-
   footer: {
     textAlign: 'center',
     fontSize: 11,
     color: colors.muted,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
 });
