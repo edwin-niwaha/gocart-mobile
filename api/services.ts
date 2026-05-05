@@ -8,8 +8,6 @@ import type {
   Cart,
   CartItem,
   Category,
-  CheckoutOrderPayload,
-  CheckoutResponse,
   CustomerAddress,
   CustomerAddressPayload,
   DeliveryOption,
@@ -503,9 +501,24 @@ export const orderApi = {
   async checkout(payload: {
     address_id: number;
     description?: string;
-  }) {
+    delivery_option?: DeliveryOption;
+    payment_method?: string;
+    pickup_station_id?: number | null;
+    coupon_code?: string;
+  }, options?: { idempotencyKey?: string }) {
     try {
-      const { data } = await api.post<Order>('/orders/checkout/', payload);
+      const { data } = await api.post<Order | { order: Order }>(
+        '/orders/checkout/',
+        payload,
+        {
+          headers: options?.idempotencyKey
+            ? { 'Idempotency-Key': options.idempotencyKey }
+            : undefined,
+        }
+      );
+      if (data && typeof data === 'object' && 'order' in data) {
+        return data.order;
+      }
       return data;
     } catch (error: any) {
       logApiError('POST /orders/checkout/ error:', error?.response?.data || error.message);
@@ -540,6 +553,46 @@ export const orderApi = {
       logApiError('POST /order-items/ error:', error?.response?.data || error.message);
       throw error;
     }
+  },
+};
+
+export type CheckoutSummaryRequest = {
+  address_id?: number | null;
+  delivery_option?: DeliveryOption;
+  pickup_station_id?: number | null;
+  coupon_code?: string;
+};
+
+export type CheckoutSummary = {
+  items_subtotal?: string | number;
+  subtotal?: string | number;
+  discount?: string | number;
+  discount_amount?: string | number;
+  shipping?: string | number;
+  shipping_fee?: string | number;
+  total?: string | number;
+  total_price?: string | number;
+  coupon_code?: string | null;
+  estimated_days?: number | null;
+  delivery_option?: DeliveryOption;
+  delivery_rate_id?: number | null;
+  pickup_station_id?: number | null;
+};
+
+export const checkoutApi = {
+  async summary(params?: CheckoutSummaryRequest) {
+    const { data } = await api.get<CheckoutSummary>('/checkout/summary/', {
+      params,
+    });
+    return data;
+  },
+
+  async validate(payload: CheckoutSummaryRequest) {
+    const { data } = await api.post<CheckoutSummary>(
+      '/checkout/validate/',
+      payload
+    );
+    return data;
   },
 };
 
@@ -749,7 +802,7 @@ export const shippingApi = {
       );
       return normalizeList(data);
     } catch (error: any) {
-      console.log(
+      logApiError(
         'GET /pickup-stations/ error:',
         error?.response?.data || error.message
       );
@@ -759,7 +812,7 @@ export const shippingApi = {
 };
 
 // paymentApi
-export type PaymentProvider = 'CASH' | 'MTN' | 'AIRTEL';
+export type PaymentProvider = 'CASH' | 'MTN' | 'CARD';
 
 export type PaymentStatus =
   | 'PENDING'
@@ -792,6 +845,28 @@ export interface InitiateMTNResponse {
   currency: string;
 }
 
+export interface InitiateCardPayload {
+  address_id: number;
+  delivery_option?: DeliveryOption;
+  pickup_station_id?: number | null;
+  coupon_code?: string;
+  gateway?: string;
+  cardholder_name: string;
+  card_last4: string;
+  expiry_month: number;
+  expiry_year: number;
+  billing_email?: string;
+  billing_phone?: string;
+}
+
+export interface InitiateCardResponse {
+  reference?: string;
+  checkout_url?: string | null;
+  status?: PaymentStatus;
+  amount?: string | number;
+  currency?: string;
+}
+
 export interface PaymentStatusResponse {
   reference: string;
   provider: PaymentProvider;
@@ -817,13 +892,38 @@ export interface FinalizeOrderResponse {
 }
 
 export const paymentApi = {
-  async create(payload: CreatePaymentPayload) {
-    const { data } = await api.post('/payments/', payload);
+  async create(payload: CreatePaymentPayload, options?: { idempotencyKey?: string }) {
+    const { data } = await api.post('/payments/', payload, {
+      headers: options?.idempotencyKey
+        ? { 'Idempotency-Key': options.idempotencyKey }
+        : undefined,
+    });
     return data;
   },
 
-  async initiateMTN(payload: InitiateMTNPayload): Promise<InitiateMTNResponse> {
-    const { data } = await api.post('/payments/mtn/initiate/', payload);
+  async initiateMTN(
+    payload: InitiateMTNPayload,
+    options?: { idempotencyKey?: string }
+  ): Promise<InitiateMTNResponse> {
+    const { data } = await api.post('/payments/mtn/initiate/', payload, {
+      headers: options?.idempotencyKey
+        ? { 'Idempotency-Key': options.idempotencyKey }
+        : undefined,
+    });
+    return data;
+  },
+
+  async initiateCard(
+    payload: InitiateCardPayload,
+    options?: { idempotencyKey?: string }
+  ): Promise<InitiateCardResponse> {
+    // TODO: Backend must use a PCI-compliant hosted/tokenized card gateway.
+    // Never send full card numbers or CVV to GoCart servers.
+    const { data } = await api.post('/payments/card/initiate/', payload, {
+      headers: options?.idempotencyKey
+        ? { 'Idempotency-Key': options.idempotencyKey }
+        : undefined,
+    });
     return data;
   },
 
@@ -832,8 +932,19 @@ export const paymentApi = {
     return data;
   },
 
-  async finalizeOrder(reference: string): Promise<FinalizeOrderResponse> {
-    const { data } = await api.post(`/payments/${reference}/finalize-order/`);
+  async finalizeOrder(
+    reference: string,
+    options?: { idempotencyKey?: string }
+  ): Promise<FinalizeOrderResponse> {
+    const { data } = await api.post(
+      `/payments/${reference}/finalize-order/`,
+      undefined,
+      {
+        headers: options?.idempotencyKey
+          ? { 'Idempotency-Key': options.idempotencyKey }
+          : undefined,
+      }
+    );
     return data;
   },
 };

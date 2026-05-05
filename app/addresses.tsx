@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { AuthGate } from '@/components/AuthGate';
 import { EmptyState } from '@/components/EmptyState';
+import { PageHeader } from '@/components/AppHeader';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import type {
   CustomerAddress,
@@ -447,18 +448,21 @@ export default function AddressesScreen() {
     <Screen scroll contentContainerStyle={styles.screenContent}>
       <AuthGate message="Log in to manage your addresses.">
         <View style={styles.container}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.pageTitle}>My Addresses</Text>
-              <Text style={styles.pageSubtitle}>
-                Save and manage delivery locations for faster checkout.
-              </Text>
-            </View>
-
+          <PageHeader
+            icon="location"
+            title="Delivery Addresses"
+            subtitle="Save locations for faster checkout"
+            tone="primary"
+            action={
+              <Pressable onPress={openAdd} style={styles.addIconBtn}>
+                <Text style={styles.addIconBtnText}>+</Text>
+              </Pressable>
+            }
+          >
             <Pressable onPress={openAdd} style={styles.addBtn}>
-              <Text style={styles.addBtnText}>+ Add Address</Text>
+              <Text style={styles.addBtnText}>Add Address</Text>
             </Pressable>
-          </View>
+          </PageHeader>
 
           {!addresses.length ? (
             <View style={styles.emptyWrap}>
@@ -533,8 +537,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 22,
+    borderRadius: radii.xl,
     padding: spacing.md,
+    ...shadows.soft,
   },
   list: {
     gap: spacing.md,
@@ -543,9 +548,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
+    borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.sm,
+    ...shadows.soft,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -609,7 +615,7 @@ const styles = StyleSheet.create({
   expandBtn: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background,
@@ -650,10 +656,24 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     height: 50,
-    borderRadius: 14,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
+  },
+  addIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  addIconBtnText: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 26,
   },
   addBtnText: {
     color: colors.surface,

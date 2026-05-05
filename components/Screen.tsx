@@ -6,7 +6,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '@/constants/theme';
 
 type ScreenProps = {
@@ -24,6 +24,12 @@ export function Screen({
   contentContainerStyle,
   style,
 }: ScreenProps) {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, spacing.md);
+  const scrollPadding = {
+    paddingBottom: spacing.xl + spacing.lg + 96 + bottomInset,
+  };
+
   if (scroll) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, style]}>
@@ -31,6 +37,7 @@ export function Screen({
           contentContainerStyle={[
             styles.baseContent,
             !noPadding && styles.paddedContent,
+            !noPadding && scrollPadding,
             contentContainerStyle,
           ]}
           showsVerticalScrollIndicator={false}

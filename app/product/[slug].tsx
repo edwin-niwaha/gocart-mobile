@@ -320,13 +320,14 @@ export default function ProductDetailScreen() {
 
     setCartBusy(true);
 
-    protectedAction(async () => {
+    void (async () => {
       try {
-        await addToCart(selectedVariant.id, 1);
+        if (!product) return;
+        await addToCart({ product, variant: selectedVariant, quantity: 1 });
       } finally {
         setCartBusy(false);
       }
-    });
+    })();
   };
 
   if (loading) {

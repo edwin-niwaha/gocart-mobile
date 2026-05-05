@@ -1,4 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { clearTokens, getTokens, saveTokens } from '@/utils/storage';
 
 const APP_ENV =
@@ -9,21 +11,66 @@ const APP_ENV =
 const ALLOW_INSECURE_API =
   process.env.EXPO_PUBLIC_ALLOW_INSECURE_API === 'true';
 
-const RAW_API_BASE_URL =
+function isReleaseEnv() {
+  return APP_ENV === 'production' || APP_ENV === 'staging';
+}
+
+const ENV_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/+$/, '') ?? '';
 
-export const API_BASE_URL = RAW_API_BASE_URL;
+function getExpoDevHost() {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.manifest2?.extra?.expoClient?.hostUri ||
+    '';
+
+  return String(hostUri).split(':')[0]?.trim() || '';
+}
+
+function normalizeDevLoopbackUrl(value: string) {
+  if (!value || isReleaseEnv()) return value;
+
+  try {
+    const url = new URL(value);
+    const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+    if (Platform.OS === 'android' && isLoopback) {
+      url.hostname = '10.0.2.2';
+      return url.toString().replace(/\/$/, '');
+    }
+  } catch {
+    return value;
+  }
+
+  return value;
+}
+
+function getDefaultDevApiBaseUrl() {
+  const expoHost = getExpoDevHost();
+
+  if (expoHost) {
+    const host =
+      Platform.OS === 'android' && ['localhost', '127.0.0.1'].includes(expoHost)
+        ? '10.0.2.2'
+        : expoHost;
+
+    return `http://${host}:8000/api/v1`;
+  }
+
+  return Platform.OS === 'android'
+    ? 'http://10.0.2.2:8000/api/v1'
+    : 'http://127.0.0.1:8000/api/v1';
+}
+
+export const API_BASE_URL =
+  normalizeDevLoopbackUrl(
+    ENV_API_BASE_URL || (isReleaseEnv() ? '' : getDefaultDevApiBaseUrl())
+  );
 
 export const DEFAULT_TENANT_SLUG =
   process.env.EXPO_PUBLIC_TENANT_SLUG?.trim() ?? '';
 
-const REQUEST_TIMEOUT_MS = Number(
-  process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 15000
-);
-
-function isReleaseEnv() {
-  return APP_ENV === 'production' || APP_ENV === 'staging';
-}
+const REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 15000);
 
 export function getApiConfigurationError() {
   if (!API_BASE_URL) {

@@ -16,10 +16,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
-import type { Category, Product } from '@/types';
+import type { Category, Product, ProductVariant } from '@/types';
 
 const FALLBACK_HERO =
   'https://via.placeholder.com/1200x600.png?text=GoCart+Mobile';
@@ -40,17 +40,7 @@ type ProductCategoryShape =
   | null
   | undefined;
 
-type ProductVariantShape = {
-  id: number;
-  name?: string;
-  sku?: string;
-  is_active?: boolean;
-  is_in_stock?: boolean;
-  stock_quantity?: number;
-  price?: string | number;
-};
-
-function dedupeVariants(variants: ProductVariantShape[] = []) {
+function dedupeVariants(variants: ProductVariant[] = []) {
   const seenIds = new Set<number>();
   const seenKeys = new Set<string>();
 
@@ -169,9 +159,7 @@ export default function HomeScreen() {
   };
 
   const getVariantsSearchText = (product: Product) => {
-    const variants = (product.variants || []) as ProductVariantShape[];
-
-    return variants
+    return (product.variants || [])
       .map((variant) => [variant.name || '', variant.sku || ''].join(' '))
       .join(' ');
   };
@@ -180,8 +168,7 @@ export default function HomeScreen() {
     item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
 
   const getActiveVariants = useCallback((product: Product) => {
-    const variants = (product.variants || []) as ProductVariantShape[];
-    return dedupeVariants(variants.filter((variant) => variant.is_active));
+    return dedupeVariants((product.variants || []).filter((variant) => variant.is_active));
   }, []);
 
   const getPurchasableVariants = useCallback(
@@ -238,7 +225,7 @@ export default function HomeScreen() {
     }
 
     return categoryName
-      ? `${categoryName} â€¢ ${activeVariants.length} options`
+      ? `${categoryName} • ${activeVariants.length} options`
       : `${activeVariants.length} options`;
   };
 
@@ -323,7 +310,7 @@ export default function HomeScreen() {
 
     try {
       setAddingProductId(product.id);
-      await addToCart(primaryVariant.id, 1);
+      await addToCart({ product, variant: primaryVariant, quantity: 1 });
     } finally {
       setAddingProductId(null);
     }
@@ -421,11 +408,7 @@ export default function HomeScreen() {
           (isOutOfStock || isAdding) && styles.cartBtnDisabled,
         ]}
         disabled={isOutOfStock || isAdding}
-        onPress={() =>
-          protectedAction(async () => {
-            await handleProductAction(item);
-          })
-        }
+        onPress={() => handleProductAction(item)}
       >
         {isAdding ? (
           <ActivityIndicator size="small" color="#fff" />
@@ -583,7 +566,7 @@ export default function HomeScreen() {
             <View style={styles.searchSummaryRow}>
               <Text style={styles.searchSummaryText}>
                 {filteredProducts.length} result
-                {filteredProducts.length === 1 ? '' : 's'} â€¢ {inStockCount} in
+                {filteredProducts.length === 1 ? '' : 's'} • {inStockCount} in
                 stock
               </Text>
 
@@ -754,10 +737,11 @@ const styles = StyleSheet.create({
   },
 
   hero: {
-    borderRadius: 24,
+    borderRadius: radii.xl,
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.ink,
+    ...shadows.card,
   },
 
   heroBg: {
@@ -768,7 +752,7 @@ const styles = StyleSheet.create({
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.38)',
+    backgroundColor: 'rgba(15,23,42,0.44)',
   },
 
   heroContent: {
@@ -807,7 +791,7 @@ const styles = StyleSheet.create({
 
   heroPrimaryButton: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 14,
@@ -859,7 +843,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 16,
+    borderRadius: radii.lg,
     paddingHorizontal: 14,
     minHeight: 52,
     flexDirection: 'row',
@@ -888,8 +872,8 @@ const styles = StyleSheet.create({
   },
 
   filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
 
   filterChipText: {
@@ -935,13 +919,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     alignItems: 'flex-start',
+    ...shadows.soft,
   },
 
   promoIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1005,9 +990,9 @@ const styles = StyleSheet.create({
   },
 
   categoryShortcutImageWrap: {
-    width: 66,
-    height: 66,
-    borderRadius: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -1035,15 +1020,11 @@ const styles = StyleSheet.create({
 
   horizontalCard: {
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: radii.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#ECECEC',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    ...shadows.soft,
   },
 
   horizontalCardImage: {
@@ -1092,7 +1073,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ink,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1107,15 +1088,11 @@ const styles = StyleSheet.create({
 
   gridCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: radii.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#ECECEC',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    ...shadows.soft,
   },
 
   gridCardImage: {
@@ -1206,7 +1183,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ink,
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 12,

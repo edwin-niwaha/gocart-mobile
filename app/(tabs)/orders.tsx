@@ -4,9 +4,12 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,8 +19,9 @@ import { router } from 'expo-router';
 
 import { AuthGate } from '@/components/AuthGate';
 import { EmptyState } from '@/components/EmptyState';
+import { PageHeader } from '@/components/AppHeader';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { money } from '@/utils/format';
 import type { Order, OrderItem, Review } from '@/types';
@@ -176,58 +180,77 @@ function ReviewModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.modalBackdrop}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalBackdrop}
+      >
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>
-            {initialReview ? 'Update Review' : 'Write a Review'}
-          </Text>
+          <ScrollView
+            contentContainerStyle={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalHandle} />
 
-          <Text style={styles.modalSubtitle}>{productTitle}</Text>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIconWrap}>
+                <Ionicons name="star-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.modalTitle}>
+                  {initialReview ? 'Update Review' : 'Write a Review'}
+                </Text>
+                <Text style={styles.modalSubtitle} numberOfLines={2}>
+                  {productTitle}
+                </Text>
+              </View>
+            </View>
 
-          <Text style={styles.fieldLabel}>Rating</Text>
-          <RatingPicker value={rating} onChange={setRating} />
+            <Text style={styles.fieldLabel}>Rating</Text>
+            <RatingPicker value={rating} onChange={setRating} />
 
-          <Text style={styles.fieldLabel}>Comment</Text>
-          <TextInput
-            value={comment}
-            onChangeText={setComment}
-            placeholder="Share your experience"
-            placeholderTextColor={colors.muted}
-            multiline
-            editable={!saving}
-            textAlignVertical="top"
-            style={styles.textArea}
-          />
+            <Text style={styles.fieldLabel}>Comment</Text>
+            <TextInput
+              value={comment}
+              onChangeText={setComment}
+              placeholder="Share your experience"
+              placeholderTextColor={colors.muted}
+              multiline
+              editable={!saving}
+              textAlignVertical="top"
+              style={styles.textArea}
+            />
 
-          <View style={styles.modalActions}>
-            <Pressable
-              disabled={saving}
-              onPress={onClose}
-              style={[
-                styles.actionBtn,
-                styles.cancelBtn,
-                saving && styles.disabledBtn,
-              ]}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable
+                disabled={saving}
+                onPress={onClose}
+                style={[
+                  styles.actionBtn,
+                  styles.cancelBtn,
+                  saving && styles.disabledBtn,
+                ]}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </Pressable>
 
-            <Pressable
-              disabled={saving}
-              onPress={handleSubmit}
-              style={[
-                styles.actionBtn,
-                styles.saveBtn,
-                saving && styles.disabledBtn,
-              ]}
-            >
-              <Text style={styles.saveBtnText}>
-                {saving ? 'Saving...' : initialReview ? 'Update' : 'Submit'}
-              </Text>
-            </Pressable>
-          </View>
+              <Pressable
+                disabled={saving}
+                onPress={handleSubmit}
+                style={[
+                  styles.actionBtn,
+                  styles.saveBtn,
+                  saving && styles.disabledBtn,
+                ]}
+              >
+                <Text style={styles.saveBtnText}>
+                  {saving ? 'Saving...' : initialReview ? 'Update' : 'Submit'}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -465,6 +488,26 @@ export default function OrdersScreen() {
             }
             ListHeaderComponent={
               <View style={styles.headerWrap}>
+                <PageHeader
+                  icon="receipt"
+                  title="Order Center"
+                  subtitle="Track purchases and manage reviews"
+                  tone="primary"
+                >
+                  <View style={styles.heroMetricRow}>
+                    <View style={styles.heroMetric}>
+                      <Text style={styles.heroMetricValue}>{orders.length}</Text>
+                      <Text style={styles.heroMetricLabel}>Loaded</Text>
+                    </View>
+                    <View style={styles.heroMetric}>
+                      <Text style={styles.heroMetricValue}>
+                        {orders.filter((item) => canReviewOrder(item.status)).length}
+                      </Text>
+                      <Text style={styles.heroMetricLabel}>Reviewable</Text>
+                    </View>
+                  </View>
+                </PageHeader>
+
                 <View style={styles.searchWrap}>
                   <Ionicons
                     name="search-outline"
@@ -519,7 +562,7 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: 150,
   },
 
   centered: {
@@ -532,6 +575,34 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     marginBottom: spacing.lg,
     gap: spacing.md,
+  },
+
+  heroMetricRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+
+  heroMetric: {
+    flex: 1,
+    borderRadius: radii.lg,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    padding: spacing.md,
+  },
+
+  heroMetricValue: {
+    color: colors.surface,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+
+  heroMetricLabel: {
+    marginTop: 3,
+    color: '#D6E4DF',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
 
   heroCard: {
@@ -576,11 +647,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     height: 48,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     paddingHorizontal: 14,
+    ...shadows.soft,
   },
 
   searchInput: {
@@ -591,11 +663,12 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.md,
     overflow: 'hidden',
+    ...shadows.soft,
   },
 
   cardPressed: {
@@ -755,21 +828,56 @@ const styles = StyleSheet.create({
   },
 
   footerSpacer: {
-    height: spacing.md,
+    height: 96,
   },
 
   modalBackdrop: {
     flex: 1,
     backgroundColor: '#00000066',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    padding: spacing.lg,
   },
 
   modalCard: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderRadius: radii.lg,
+    maxHeight: '82%',
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+
+  modalContent: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+
+  modalHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    marginBottom: 2,
+  },
+
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+
+  modalIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modalHeaderText: {
+    flex: 1,
+    minWidth: 0,
   },
 
   modalTitle: {
@@ -779,8 +887,10 @@ const styles = StyleSheet.create({
   },
 
   modalSubtitle: {
+    marginTop: 2,
     fontSize: 13,
     color: colors.muted,
+    lineHeight: 18,
   },
 
   fieldLabel: {
@@ -809,7 +919,7 @@ const styles = StyleSheet.create({
   },
 
   textArea: {
-    minHeight: 110,
+    minHeight: 96,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
@@ -823,6 +933,7 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: spacing.sm,
+    paddingTop: 2,
   },
 
   actionBtn: {

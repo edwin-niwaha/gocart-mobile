@@ -1,39 +1,47 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { AuthGate } from '@/components/AuthGate';
+import { PageHeader } from '@/components/AppHeader';
 import { CartRow } from '@/components/CartRow';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { money } from '@/utils/format';
+import { getCartTotal } from '@/utils/product';
 
 export default function CartScreen() {
-  const { cartItems, loadAuthedData, updateCartQty, removeCartItem, loading } = useShop();
-  const { user, isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      loadAuthedData().catch(() => undefined);
-    }
-  }, [isAuthenticated, user, loadAuthedData]);
+  const { cartItems, updateCartQty, removeCartItem, loading } = useShop();
+  const { isAuthenticated } = useAuth();
 
   const total = useMemo(() => {
-    return cartItems.reduce((sum, item) => {
-      const lineTotal =
-        item.line_total != null
-          ? Number(item.line_total)
-          : Number(item.variant?.price || 0) * item.quantity;
-
-      return sum + lineTotal;
-    }, 0);
+    return getCartTotal(cartItems);
   }, [cartItems]);
 
   return (
     <Screen scroll contentContainerStyle={{ paddingTop: 0 }}>
-      <AuthGate message="Log in to view your cart and place orders.">
+        <PageHeader
+          icon="cart"
+          title="Shopping Cart"
+          subtitle="Review your bag before checkout"
+          tone="dark"
+          style={styles.pageHeader}
+        >
+          <View style={styles.cartStatsRow}>
+            <View>
+              <Text style={styles.statLabel}>Items</Text>
+              <Text style={styles.statValue}>{cartItems.length}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View>
+              <Text style={styles.statLabel}>Subtotal</Text>
+              <Text style={styles.statValue}>{money(total)}</Text>
+            </View>
+          </View>
+        </PageHeader>
+
         {loading && !cartItems.length ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -53,7 +61,6 @@ export default function CartScreen() {
             <CartRow
               key={item.id}
               item={item}
-              canDecrease={canDecrease}
               onMinus={
                 canDecrease
                   ? () => updateCartQty(item.id, item.quantity - 1)
@@ -72,24 +79,59 @@ export default function CartScreen() {
 
             <Link href="/checkout" asChild>
               <Pressable style={styles.button}>
-                <Text style={styles.buttonText}>Proceed to checkout</Text>
+                <Ionicons
+                  name={isAuthenticated ? 'card-outline' : 'log-in-outline'}
+                  size={18}
+                  color={colors.surface}
+                />
+                <Text style={styles.buttonText}>
+                  {isAuthenticated ? 'Proceed to checkout' : 'Log in to checkout'}
+                </Text>
               </Pressable>
             </Link>
           </View>
         )}
-      </AuthGate>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  pageHeader: {
+    marginBottom: spacing.sm,
+  },
+  cartStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.14)',
+    paddingTop: spacing.md,
+  },
+  statLabel: {
+    color: '#D6E4DF',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    marginTop: 3,
+    color: colors.surface,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
   summary: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
     gap: 8,
+    ...shadows.card,
   },
   summaryLabel: {
     color: colors.muted,
@@ -101,10 +143,13 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 14,
+    backgroundColor: colors.ink,
+    borderRadius: radii.md,
     paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   buttonText: {
     color: 'white',
@@ -112,12 +157,13 @@ const styles = StyleSheet.create({
   },
   loadingCard: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.xl,
     alignItems: 'center',
     gap: spacing.sm,
+    ...shadows.soft,
   },
   loadingText: {
     color: colors.muted,
