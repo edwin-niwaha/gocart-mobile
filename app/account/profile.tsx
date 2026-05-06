@@ -7,24 +7,48 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack } from 'expo-router';
 
+import { PageHeader } from '@/components/AppHeader';
 import { Screen } from '@/components/Screen';
 import { authApi, getErrorMessage } from '@/api/services';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 
 type SelectedImage = {
   uri: string;
   name: string;
   type: string;
+  file?: File;
+  size?: number;
 };
+
+const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
+
+function getExtensionFromMimeType(mimeType: string) {
+  const subtype = mimeType.split('/')[1]?.split(';')[0]?.trim();
+  if (!subtype) return 'jpg';
+  if (subtype === 'jpeg') return 'jpg';
+  return subtype.replace(/[^a-z0-9]/gi, '') || 'jpg';
+}
+
+function getAvatarFileName(asset: ImagePicker.ImagePickerAsset, mimeType: string) {
+  const candidate = asset.fileName?.trim();
+  if (candidate && candidate.includes('.')) {
+    return candidate;
+  }
+
+  return `avatar-${Date.now()}.${getExtensionFromMimeType(mimeType)}`;
+}
 
 export default function ProfileScreen() {
   const { user, refreshMe } = useAuth();
+  const { width } = useWindowDimensions();
+  const stackFields = width < 380;
 
   const [username, setUsername] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -81,7 +105,7 @@ export default function ProfileScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -90,11 +114,24 @@ export default function ProfileScreen() {
     if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
+    const mimeType = asset.mimeType || 'image/jpeg';
+
+    if (!mimeType.startsWith('image/')) {
+      Alert.alert('Unsupported file', 'Please choose an image file for your profile photo.');
+      return;
+    }
+
+    if (asset.fileSize && asset.fileSize > MAX_AVATAR_SIZE_BYTES) {
+      Alert.alert('Image too large', 'Please choose an image smaller than 5 MB.');
+      return;
+    }
 
     setSelectedImage({
       uri: asset.uri,
-      name: asset.fileName || `avatar-${Date.now()}.jpg`,
-      type: asset.mimeType || 'image/jpeg',
+      name: getAvatarFileName(asset, mimeType),
+      type: mimeType,
+      file: asset.file,
+      size: asset.fileSize,
     });
   };
 
@@ -120,17 +157,18 @@ export default function ProfileScreen() {
             : `avatar-${Date.now()}.jpg`;
 
         const fileType = selectedImage.type || 'image/jpeg';
-        const uploadUri = selectedImage.uri.startsWith('file://')
-          ? selectedImage.uri
-          : `file://${selectedImage.uri}`;
 
-        const avatarFile = {
-          uri: uploadUri,
-          name: filename,
-          type: fileType,
-        } as unknown as Blob;
+        if (selectedImage.file) {
+          formData.append('avatar', selectedImage.file);
+        } else {
+          const avatarFile = {
+            uri: selectedImage.uri,
+            name: filename,
+            type: fileType,
+          } as unknown as Blob;
 
-        formData.append('avatar', avatarFile);
+          formData.append('avatar', avatarFile);
+        }
 
         await authApi.updateProfile(formData);
       } else {
@@ -157,6 +195,13 @@ export default function ProfileScreen() {
       <Stack.Screen options={{ title: 'Profile' }} />
 
       <Screen scroll contentContainerStyle={styles.container}>
+        <PageHeader
+          icon="person"
+          title="Your Profile"
+          subtitle="Keep your photo and personal details up to date"
+          tone="primary"
+        />
+
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
             <Pressable onPress={pickImage} style={styles.avatarButton}>
@@ -174,6 +219,9 @@ export default function ProfileScreen() {
             <View style={styles.profileText}>
               <Text style={styles.profileName}>{displayName}</Text>
               <Text style={styles.profileEmail}>{user?.email || 'No email address'}</Text>
+              <Text style={styles.profileHint}>
+                JPG, PNG, or HEIC up to 5 MB. Square photos look best.
+              </Text>
 
               <Pressable onPress={pickImage} style={styles.secondaryAction}>
                 <Text style={styles.secondaryActionText}>Change photo</Text>
@@ -184,6 +232,9 @@ export default function ProfileScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Personal information</Text>
+          <Text style={styles.sectionDescription}>
+            This name appears on orders, account screens, and support messages.
+          </Text>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Username</Text>
@@ -197,7 +248,7 @@ export default function ProfileScreen() {
             />
           </View>
 
-          <View style={styles.inlineFields}>
+          <View style={[styles.inlineFields, stackFields && styles.stackedFields]}>
             <View style={[styles.fieldGroup, styles.flexOne]}>
               <Text style={styles.fieldLabel}>First name</Text>
               <TextInput
@@ -224,6 +275,9 @@ export default function ProfileScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Account details</Text>
+          <Text style={styles.sectionDescription}>
+            Email and account status are protected details.
+          </Text>
 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email</Text>
@@ -285,27 +339,27 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.md,
-    paddingBottom: spacing.xl,
     gap: spacing.md,
     backgroundColor: colors.background,
   },
 
   profileCard: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 18,
+    ...shadows.soft,
   },
 
   sectionCard: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
-    gap: 14,
+    gap: 12,
+    ...shadows.soft,
   },
 
   profileHeader: {
@@ -320,8 +374,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
     backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -347,6 +401,7 @@ const styles = StyleSheet.create({
 
   profileText: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
 
@@ -354,12 +409,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: colors.text,
+    flexShrink: 1,
   },
 
   profileEmail: {
     fontSize: 13,
     lineHeight: 18,
     color: colors.muted,
+  },
+
+  profileHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.subtle,
   },
 
   secondaryAction: {
@@ -383,6 +445,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: colors.text,
+  },
+
+  sectionDescription: {
+    marginTop: -6,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.muted,
   },
 
   fieldGroup: {
@@ -410,6 +479,10 @@ const styles = StyleSheet.create({
   inlineFields: {
     flexDirection: 'row',
     gap: 10,
+  },
+
+  stackedFields: {
+    flexDirection: 'column',
   },
 
   flexOne: {
@@ -472,10 +545,11 @@ const styles = StyleSheet.create({
 
   primaryButton: {
     minHeight: 52,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary ?? colors.text,
+    ...shadows.soft,
   },
 
   primaryButtonDisabled: {

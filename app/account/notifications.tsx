@@ -9,9 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
+import { PageHeader } from '@/components/AppHeader';
 import { Screen } from '@/components/Screen';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { newsletterApi, getErrorMessage } from '@/api/services';
 import { showError, showInfo, showSuccess } from '@/utils/toast';
@@ -125,6 +127,13 @@ export default function AccountNotificationsScreen() {
       />
 
       <Screen scroll contentContainerStyle={styles.container}>
+        <PageHeader
+          icon="mail"
+          title="Email Updates"
+          subtitle="Choose how GoCart keeps in touch"
+          tone="primary"
+        />
+
         <View style={styles.card}>
           <Text style={styles.subtitle}>
             Manage how you receive product news, offers, and important GoCart
@@ -175,6 +184,41 @@ export default function AccountNotificationsScreen() {
                   ]}
                 >
                   {emailUpdates ? 'Subscribed' : 'Not subscribed'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.preferenceList}>
+              <View style={styles.preferenceRow}>
+                <View style={styles.preferenceIcon}>
+                  <Ionicons name="receipt-outline" size={17} color={colors.primary} />
+                </View>
+                <View style={styles.preferenceText}>
+                  <Text style={styles.preferenceTitle}>Order and account alerts</Text>
+                  <Text style={styles.preferenceSubtitle}>
+                    Receipts, payment updates, password emails, and security notices stay on.
+                  </Text>
+                </View>
+                <Text style={styles.lockedText}>Always on</Text>
+              </View>
+
+              <View style={styles.preferenceRow}>
+                <View style={[styles.preferenceIcon, styles.preferenceIconAccent]}>
+                  <Ionicons name="pricetag-outline" size={17} color={colors.accent} />
+                </View>
+                <View style={styles.preferenceText}>
+                  <Text style={styles.preferenceTitle}>Offers and product news</Text>
+                  <Text style={styles.preferenceSubtitle}>
+                    Controlled by the newsletter subscription switch above.
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.lockedText,
+                    emailUpdates ? styles.enabledText : styles.mutedText,
+                  ]}
+                >
+                  {emailUpdates ? 'On' : 'Off'}
                 </Text>
               </View>
             </View>
@@ -254,8 +298,6 @@ export default function AccountNotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: spacing.md,
-    paddingBottom: spacing.xl,
     gap: spacing.md,
   },
 
@@ -270,9 +312,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     padding: spacing.lg,
     gap: spacing.md,
+    ...shadows.soft,
   },
 
   title: {
@@ -290,8 +333,8 @@ const styles = StyleSheet.create({
   optionCard: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
-    backgroundColor: colors.background,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surfaceMuted,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -371,9 +414,74 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 
+  preferenceList: {
+    gap: 10,
+    paddingTop: 4,
+  },
+
+  preferenceRow: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  preferenceIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+    flexShrink: 0,
+  },
+
+  preferenceIconAccent: {
+    backgroundColor: colors.accentSoft,
+  },
+
+  preferenceText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+
+  preferenceTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+  },
+
+  preferenceSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+  },
+
+  lockedText: {
+    flexShrink: 0,
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+
+  enabledText: {
+    color: colors.success,
+  },
+
+  mutedText: {
+    color: colors.subtle,
+  },
+
   primaryButton: {
     minHeight: 50,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -388,7 +496,7 @@ const styles = StyleSheet.create({
 
   secondaryButton: {
     minHeight: 50,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

@@ -37,8 +37,8 @@ export function Screen({
           contentContainerStyle={[
             styles.baseContent,
             !noPadding && styles.paddedContent,
-            !noPadding && scrollPadding,
             contentContainerStyle,
+            !noPadding && scrollPadding,
           ]}
           showsVerticalScrollIndicator={false}
         >

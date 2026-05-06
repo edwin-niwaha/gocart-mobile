@@ -38,20 +38,25 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || '';
   const webClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || '';
-  const androidClientId =
+  const authSessionAndroidClientId =
     rawAndroidClientId || (!isReleaseBuild ? webClientId : '');
-  const iosClientId =
+  const authSessionIosClientId =
     rawIosClientId || (!isReleaseBuild ? webClientId : '');
   const platformClientId =
     Platform.OS === 'android'
-      ? androidClientId
+      ? authSessionAndroidClientId
       : Platform.OS === 'ios'
-        ? iosClientId
+        ? authSessionIosClientId
         : webClientId;
-  const missingNativeClientId =
-    (Platform.OS === 'android' && !rawAndroidClientId) ||
-    (Platform.OS === 'ios' && !rawIosClientId);
   const hasGoogleClientIds = Boolean(platformClientId);
+  const hasNativeClientId =
+    Platform.OS === 'android'
+      ? Boolean(rawAndroidClientId)
+      : Platform.OS === 'ios'
+        ? Boolean(rawIosClientId)
+        : false;
+  const canUseNativeGoogleSignIn =
+    isNativeMobile && Boolean(webClientId) && hasNativeClientId;
 
   useEffect(() => {
     if (!isNativeMobile) return;
@@ -73,8 +78,8 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
   );
 
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId,
-    iosClientId,
+    androidClientId: authSessionAndroidClientId || undefined,
+    iosClientId: authSessionIosClientId || undefined,
     webClientId,
     redirectUri,
     scopes: ['openid', 'profile', 'email'],
@@ -129,7 +134,7 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
 
   const startGoogleAuth = async () => {
     try {
-      if (isNativeMobile) {
+      if (isNativeMobile && canUseNativeGoogleSignIn) {
         if (!webClientId) {
           Alert.alert(
             errorTitle,
@@ -173,20 +178,30 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
         return;
       }
 
-      if (!hasGoogleClientIds) {
+      if (isNativeMobile && isReleaseBuild) {
+        Alert.alert(
+          errorTitle,
+          Platform.OS === 'android'
+            ? 'This build is missing EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID. Add the Android OAuth client ID for package com.gocart.mobile and rebuild the app.'
+            : 'This build is missing EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID. Add the iOS OAuth client ID and rebuild the app.'
+        );
+        return;
+      }
+
+      if (isNativeMobile && !webClientId) {
+        Alert.alert(
+          errorTitle,
+          'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID. Add the web OAuth client ID used by the backend before signing in with Google.'
+        );
+        return;
+      }
+
+      if (!isNativeMobile && !hasGoogleClientIds) {
         Alert.alert(
           errorTitle,
           Platform.OS === 'android'
             ? 'Missing EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID. Add an Android OAuth client ID for package com.gocart.mobile, or set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for local development.'
             : 'Google sign-in is not configured for this build.'
-        );
-        return;
-      }
-
-      if (isReleaseBuild && missingNativeClientId) {
-        Alert.alert(
-          errorTitle,
-          'This release build is missing its native Google OAuth client ID.'
         );
         return;
       }
@@ -207,8 +222,24 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
       const code = typeof error === 'object' && error && 'code' in error
         ? String((error as { code?: string }).code)
         : '';
+      const message = error instanceof Error ? error.message : String(error || '');
 
       if (code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
+
+      if (
+        isNativeMobile &&
+        !isReleaseBuild &&
+        request &&
+        (code === '10' || message.includes('DEVELOPER_ERROR'))
+      ) {
+        logError(
+          'Native Google sign-in is not configured for this debug build; falling back to browser auth.',
+          error
+        );
+        setGoogleLoading(true);
+        await promptAsync();
         return;
       }
 
@@ -223,7 +254,9 @@ export function useGoogleAuth(options?: UseGoogleAuthOptions) {
   return {
     googleLoading,
     startGoogleAuth,
-    googleReady: isNativeMobile ? Boolean(webClientId) : hasGoogleClientIds && !!request,
+    googleReady: isNativeMobile
+      ? Boolean(webClientId) && (canUseNativeGoogleSignIn || !isReleaseBuild)
+      : hasGoogleClientIds && !!request,
     redirectUri,
   };
 }
