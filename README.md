@@ -80,6 +80,13 @@ Copy-Item .env.example .env
 
 4. If your Android build relies on Firebase configuration and `google-services.json` is not already present locally, place it in the project root before building.
 
+5. For local Android native builds, make sure Gradle can find the Android SDK. `npm run android` recreates `android/local.properties` automatically when it can find the SDK from `ANDROID_HOME`, `ANDROID_SDK_ROOT`, or the standard Windows Android Studio location. If your SDK is installed somewhere else, set `ANDROID_HOME` before running:
+
+```powershell
+$env:ANDROID_HOME="C:\Users\<you>\AppData\Local\Android\Sdk"
+npm run android
+```
+
 ### Run the App
 
 #### Android
