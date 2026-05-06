@@ -236,6 +236,63 @@ export type Notification = {
 export type NotificationListResponse = ListResponse<Notification>;
 export type PaginatedNotificationResponse = PaginatedResponse<Notification>;
 
+export type PaymentStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED'
+  | string;
+
+export type PaymentProvider =
+  | 'CASH'
+  | 'MTN'
+  | 'CARD'
+  | 'STRIPE'
+  | 'PAYSTACK'
+  | 'FLUTTERWAVE'
+  | string;
+
+export type Payment = {
+  id: number;
+  reference: string;
+  provider: PaymentProvider;
+  status: PaymentStatus;
+  amount?: string | number;
+  currency?: string;
+  phone_number?: string;
+  external_id?: string | null;
+  transaction_id?: string | null;
+  order_slug?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type ShipmentStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SHIPPED'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | string;
+
+export type Shipment = {
+  id: number;
+  order?: number | null;
+  order_slug?: string | null;
+  shipping_method?: number | null;
+  shipping_method_name?: string | null;
+  address?: number | null;
+  status?: ShipmentStatus;
+  tracking_number?: string | null;
+  shipping_fee?: string | number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ReviewUser = {
   id: number;
   email?: string;

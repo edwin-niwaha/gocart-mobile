@@ -1,7 +1,8 @@
 import { isAxiosError } from 'axios';
-import { api } from '@/api/client';
+import { API_BASE_URL, DEFAULT_TENANT_SLUG, api } from '@/api/client';
 import { normalizeList } from '@/utils/format';
 import { logError } from '@/utils/logger';
+import { getTokens } from '@/utils/storage';
 
 import type {
   AuthResponse,
@@ -15,11 +16,13 @@ import type {
   Notification,
   Order,
   OrderItem,
+  Payment,
   PaginatedResponse,
   PickupStation,
   Product,
   ProductRating,
   Review,
+  Shipment,
   User,
   Wishlist,
   WishlistItem,
@@ -108,6 +111,49 @@ function logApiError(message: string, error: unknown) {
   logError(message, getApiErrorData(error) ?? error);
 }
 
+function createApiError(message: string, response?: { status: number; data: unknown }) {
+  return Object.assign(new Error(message), {
+    response,
+  });
+}
+
+async function parseResponseData(response: Response) {
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return text || null;
+}
+
+async function patchMultipart<T>(path: string, payload: FormData): Promise<T> {
+  const tokens = await getTokens();
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: {
+      Accept: 'application/json',
+      ...(tokens?.access ? { Authorization: `Bearer ${tokens.access}` } : {}),
+      ...(DEFAULT_TENANT_SLUG ? { 'X-Tenant-Slug': DEFAULT_TENANT_SLUG } : {}),
+      'X-App-Version': process.env.EXPO_PUBLIC_APP_VERSION ?? 'dev',
+    },
+    body: payload,
+  });
+
+  const data = await parseResponseData(response);
+
+  if (!response.ok) {
+    throw createApiError(`Request failed with status code ${response.status}`, {
+      status: response.status,
+      data,
+    });
+  }
+
+  return data as T;
+}
+
 function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
   if (!value || typeof value !== 'object') return false;
 
@@ -169,12 +215,7 @@ export const authApi = {
 
   async updateProfile(payload: FormData) {
     try {
-      const { data } = await api.patch<User>('/auth/me/', payload, {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
-      return data;
+      return await patchMultipart<User>('/auth/me/', payload);
     } catch (error: any) {
       logApiError('PATCH /auth/me/ multipart error:', error?.response?.data || error.message);
       throw error;
@@ -795,6 +836,18 @@ export const addressApi = {
 };
 
 export const shippingApi = {
+  async shipments(params?: { status?: string; ordering?: string }) {
+    try {
+      const { data } = await api.get<Shipment[] | { results: Shipment[] }>('/shipments/', {
+        params,
+      });
+      return normalizeList(data);
+    } catch (error: any) {
+      logApiError('GET /shipments/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
   async listPickupStations() {
     try {
       const { data } = await api.get<PickupStation[] | { results: PickupStation[] }>(
@@ -892,6 +945,18 @@ export interface FinalizeOrderResponse {
 }
 
 export const paymentApi = {
+  async list(params?: { status?: string; provider?: string; ordering?: string }) {
+    try {
+      const { data } = await api.get<Payment[] | { results: Payment[] }>('/payments/', {
+        params,
+      });
+      return normalizeList(data);
+    } catch (error: any) {
+      logApiError('GET /payments/ error:', error?.response?.data || error.message);
+      throw error;
+    }
+  },
+
   async create(payload: CreatePaymentPayload, options?: { idempotencyKey?: string }) {
     const { data } = await api.post('/payments/', payload, {
       headers: options?.idempotencyKey

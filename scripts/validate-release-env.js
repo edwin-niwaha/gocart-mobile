@@ -110,6 +110,36 @@ if (isPlaceholder(env.EXPO_PUBLIC_EAS_PROJECT_ID)) {
 
 if (!fs.existsSync(path.join(root, 'google-services.json'))) {
   warnings.push('google-services.json is missing locally; EAS builds need this supplied as a secret file.');
+} else {
+  try {
+    const googleServices = JSON.parse(
+      fs.readFileSync(path.join(root, 'google-services.json'), 'utf8')
+    );
+    const expectedAndroidClientId = env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+    const clients = Array.isArray(googleServices.client)
+      ? googleServices.client
+      : [];
+    const oauthClients = clients.flatMap((client) =>
+      Array.isArray(client.oauth_client) ? client.oauth_client : []
+    );
+    const hasAndroidOAuthClient = oauthClients.some(
+      (client) =>
+        client.client_type === 1 &&
+        client.client_id === expectedAndroidClientId
+    );
+
+    if (expectedAndroidClientId && !hasAndroidOAuthClient) {
+      const message =
+        'google-services.json does not contain the configured Android OAuth client. Download the current Firebase google-services.json after adding the package/SHA-1 client.';
+      if (profile === 'development') {
+        warnings.push(message);
+      } else {
+        fail(message, failures);
+      }
+    }
+  } catch {
+    warnings.push('google-services.json could not be parsed as JSON.');
+  }
 }
 
 if (failures.length) {

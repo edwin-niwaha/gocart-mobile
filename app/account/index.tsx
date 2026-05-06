@@ -118,6 +118,10 @@ function Section({
 
 export default function SettingsScreen() {
   const { user, logout, loading } = useAuth();
+  const displayName =
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() ||
+    user?.username ||
+    'GoCart shopper';
 
   return (
     <>
@@ -130,6 +134,55 @@ export default function SettingsScreen() {
           subtitle="Profile, security, support, and preferences"
           tone="dark"
         />
+
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryAvatar}>
+            <Text style={styles.summaryAvatarText}>
+              {(displayName || user?.email || 'G').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.summaryBody}>
+            <Text style={styles.summaryName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.summaryEmail} numberOfLines={1}>
+              {user?.email || 'No email address'}
+            </Text>
+
+            <View style={styles.badgeRow}>
+              <View
+                style={[
+                  styles.statusPill,
+                  user?.is_email_verified
+                    ? styles.statusPillSuccess
+                    : styles.statusPillWarning,
+                ]}
+              >
+                <Ionicons
+                  name={user?.is_email_verified ? 'checkmark-circle' : 'alert-circle'}
+                  size={13}
+                  color={user?.is_email_verified ? colors.success : colors.warning}
+                />
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    user?.is_email_verified
+                      ? styles.statusPillTextSuccess
+                      : styles.statusPillTextWarning,
+                  ]}
+                >
+                  {user?.is_email_verified ? 'Verified' : 'Verify email'}
+                </Text>
+              </View>
+
+              <View style={styles.statusPill}>
+                <Ionicons name="person-circle" size={13} color={colors.primary} />
+                <Text style={styles.statusPillText}>{user?.user_type || 'USER'}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
 
         <Section title="Account" subtitle="Personal details and saved information">
           <SettingsRow
@@ -145,10 +198,34 @@ export default function SettingsScreen() {
             href="/addresses"
           />
           <SettingsRow
+            icon="receipt-outline"
+            label="Orders"
+            subtitle="Track purchases and manage product reviews"
+            href="/orders"
+          />
+          <SettingsRow
+            icon="heart-outline"
+            label="Wishlist"
+            subtitle="Return to products you saved for later"
+            href="/wishlist"
+          />
+          <SettingsRow
             icon="mail-outline"
             label="Notifications"
             subtitle="Manage email updates, offers, and alerts"
             href="/account/notifications"
+          />
+          <SettingsRow
+            icon="card-outline"
+            label="Payments"
+            subtitle="View payment status, references, and totals"
+            href="/account/payments"
+          />
+          <SettingsRow
+            icon="cube-outline"
+            label="Shipments"
+            subtitle="Follow delivery status and tracking details"
+            href="/account/shipments"
           />
         </Section>
 
@@ -209,6 +286,79 @@ const styles = StyleSheet.create({
   page: {
     gap: spacing.lg,
     backgroundColor: colors.background,
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.soft,
+  },
+  summaryAvatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    flexShrink: 0,
+  },
+  summaryAvatarText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.primary,
+  },
+  summaryBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  summaryName: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  summaryEmail: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+  },
+  statusPillSuccess: {
+    backgroundColor: colors.successSoft,
+  },
+  statusPillWarning: {
+    backgroundColor: colors.warningSoft,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  statusPillTextSuccess: {
+    color: colors.success,
+  },
+  statusPillTextWarning: {
+    color: colors.warning,
   },
   section: {
     gap: spacing.sm,
