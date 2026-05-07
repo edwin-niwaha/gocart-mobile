@@ -20,6 +20,7 @@ import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
 import type { Category, Product, ProductVariant } from '@/types';
+import { getPrimaryImage } from '@/utils/product';
 
 const FALLBACK_HERO =
   'https://via.placeholder.com/1200x600.png?text=GoCart+Mobile';
@@ -104,9 +105,9 @@ export default function HomeScreen() {
       .filter(
         (product) =>
           product.is_featured &&
-          (product.hero_image || product.image_urls?.[0])
+          getPrimaryImage(product)
       )
-      .map((product) => product.hero_image || product.image_urls?.[0])
+      .map((product) => getPrimaryImage(product))
       .filter(Boolean)
       .slice(0, 6) as string[];
 
@@ -164,8 +165,7 @@ export default function HomeScreen() {
       .join(' ');
   };
 
-  const getImage = (item: Product) =>
-    item.hero_image || item.image_urls?.[0] || FALLBACK_PRODUCT;
+  const getImage = (item: Product) => getPrimaryImage(item) || FALLBACK_PRODUCT;
 
   const getActiveVariants = useCallback((product: Product) => {
     return dedupeVariants((product.variants || []).filter((variant) => variant.is_active));

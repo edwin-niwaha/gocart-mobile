@@ -20,6 +20,7 @@ import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { useShop } from '@/providers/ShopProvider';
 import { useProtectedAction } from '@/hooks/useProtectedAction';
 import type { Product, ProductVariant } from '@/types';
+import { getPrimaryImage } from '@/utils/product';
 
 const FALLBACK_CATEGORY =
   'https://via.placeholder.com/300x300.png?text=Category';
@@ -186,7 +187,7 @@ export default function CategoriesScreen() {
     products.filter((p) => p.category?.slug === slug).length;
 
   const getProductImage = (product: Product) =>
-    product.hero_image || product.image_urls?.[0] || FALLBACK_PRODUCT;
+    getPrimaryImage(product) || FALLBACK_PRODUCT;
 
   const formatPrice = (price: string | number) =>
     `UGX ${Number(price || 0).toLocaleString()}`;

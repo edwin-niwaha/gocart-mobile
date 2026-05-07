@@ -19,7 +19,14 @@ export function getPrimaryVariant(product: Product) {
 }
 
 export function getPrimaryImage(product: Product) {
-  return product.hero_image ?? product.image_urls?.[0] ?? null;
+  return (
+    product.primary_image ??
+    product.hero_image_url ??
+    product.hero_image ??
+    product.image_urls?.[0] ??
+    product.images?.find((image) => image.is_active !== false)?.image_url ??
+    null
+  );
 }
 
 export function getVariantUnitPrice(product: Product, variant: ProductVariant) {

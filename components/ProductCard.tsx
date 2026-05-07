@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, shadows, spacing } from '@/constants/theme';
 import { Product } from '@/types';
 import { money } from '@/utils/format';
-import { getPrimaryVariant } from '@/utils/product';
+import { getPrimaryImage, getPrimaryVariant } from '@/utils/product';
 
 const FALLBACK_IMAGE =
   'https://via.placeholder.com/400x300.png?text=Product';
@@ -21,10 +21,7 @@ export function ProductCard({
   onToggleWishlist?: () => void;
   wished?: boolean;
 }) {
-  const image =
-    product.hero_image ||
-    product.image_urls?.[0] ||
-    FALLBACK_IMAGE;
+  const image = getPrimaryImage(product) || FALLBACK_IMAGE;
 
   const activeVariants =
     product.variants?.filter((v) => v.is_active) ?? [];

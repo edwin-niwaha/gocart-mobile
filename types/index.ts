@@ -87,7 +87,10 @@ export type Product = {
   slug: string;
   description: string;
   hero_image?: string | null;
-  image_urls: string[];
+  hero_image_url?: string | null;
+  primary_image?: string | null;
+  image_urls?: string[];
+  images?: ProductImage[];
   is_active: boolean;
   is_featured: boolean;
   base_price: string;
@@ -98,6 +101,17 @@ export type Product = {
   total_reviews?: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductImage = {
+  id?: number;
+  image?: string | null;
+  image_url?: string | null;
+  alt_text?: string;
+  sort_order?: number;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type ProductPayloadVariant = {
@@ -116,7 +130,13 @@ export type ProductPayload = {
   slug?: string;
   description?: string;
   hero_image?: string | null;
-  image_urls?: string[];
+  images?: Array<{
+    id?: number;
+    image?: unknown;
+    alt_text?: string;
+    sort_order?: number;
+    is_active?: boolean;
+  }>;
   is_active?: boolean;
   is_featured?: boolean;
   category_id: number;
