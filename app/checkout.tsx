@@ -1316,14 +1316,20 @@ export default function CheckoutScreen() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.eyebrow}>CHECKOUT</Text>
+                <Text style={styles.eyebrow}>SECURE CHECKOUT</Text>
                 <Text style={styles.heroTitle}>Complete your order</Text>
               </View>
             </View>
 
             <View style={styles.heroStatsGrid}>
               <HeroStat label="Items" value={`${itemCount}`} />
+            </View>
+
+            <View style={styles.heroStatsGrid}>
               <HeroStat label="Delivery" value={deliveryLabel} />
+            </View>
+
+            <View style={styles.heroStatsGrid}>
               <HeroStat
                 label="Total"
                 value={summaryLoading ? "..." : money(total)}
@@ -1549,19 +1555,7 @@ export default function CheckoutScreen() {
                         {selected && <View style={styles.paymentRadioInner} />}
                       </View>
                     </View>
-
-                    <Text
-                      style={[
-                        styles.iconPaymentLabel,
-                        selected && styles.iconPaymentLabelSelected,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-
-                    <Text style={styles.paymentSubtitle}>
-                      {option.subtitle}
-                    </Text>
+                      
                   </Pressable>
                 );
               })}
@@ -2346,10 +2340,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: "#F8FAFC",
     borderRadius: 18,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 12,
-    minHeight: 108,
-    justifyContent: "space-between",
+    minHeight: 72,
+    justifyContent: "center",
   },
 
   iconPaymentCardSelected: {
