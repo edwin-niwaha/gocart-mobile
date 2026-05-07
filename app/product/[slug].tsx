@@ -19,6 +19,7 @@ import { useProtectedAction } from '@/hooks/useProtectedAction';
 import { useShop } from '@/providers/ShopProvider';
 import { Product, ProductVariant } from '@/types';
 import { money } from '@/utils/format';
+import { getPrimaryImage } from '@/utils/product';
 
 const FALLBACK_PRODUCT = 'https://via.placeholder.com/800x600.png?text=Product';
 
@@ -264,7 +265,14 @@ export default function ProductDetailScreen() {
   );
 
   const productImages = useMemo(() => {
-    return dedupeImageUrls([product?.hero_image, ...(product?.image_urls || [])]);
+    return dedupeImageUrls([
+      product ? getPrimaryImage(product) : null,
+      product?.hero_image,
+      ...(product?.image_urls || []),
+      ...(product?.images
+        ?.filter((image) => image.is_active !== false)
+        .map((image) => image.image_url) || []),
+    ]);
   }, [product]);
 
   const imageUri = productImages[0] || FALLBACK_PRODUCT;
