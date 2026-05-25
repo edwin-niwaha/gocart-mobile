@@ -315,6 +315,14 @@ function OrderCard({
           </Text>
         ) : null}
 
+        {order.refund_status ? (
+          <View style={styles.refundBadge}>
+            <Text style={styles.refundBadgeText}>
+              Refund {String(order.refund_status).toUpperCase()}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.cardFooter}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.amount}>{money(order.total_price ?? 0)}</Text>
@@ -739,6 +747,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     fontWeight: '600',
+  },
+
+  refundBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+
+  refundBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#7C3AED',
   },
 
   cardFooter: {

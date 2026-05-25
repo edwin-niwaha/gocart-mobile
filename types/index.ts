@@ -72,6 +72,7 @@ export type ProductVariant = {
   name: string;
   sku: string;
   price: string;
+  unit_cost?: string | number;
   stock_quantity: number;
   max_quantity_per_order?: number | null;
   is_active: boolean;
@@ -119,6 +120,7 @@ export type ProductPayloadVariant = {
   name: string;
   sku?: string;
   price: string;
+  unit_cost?: string | number;
   stock_quantity?: number;
   max_quantity_per_order?: number | null;
   is_active?: boolean;
@@ -130,13 +132,13 @@ export type ProductPayload = {
   slug?: string;
   description?: string;
   hero_image?: string | null;
-  images?: Array<{
+  images?: {
     id?: number;
     image?: unknown;
     alt_text?: string;
     sort_order?: number;
     is_active?: boolean;
-  }>;
+  }[];
   is_active?: boolean;
   is_featured?: boolean;
   category_id: number;
@@ -193,6 +195,40 @@ export type OrderStatus =
 
 export type DeliveryOption = 'HOME_DELIVERY' | 'PICKUP_STATION';
 
+export type MoneyValue = string | number | null;
+
+export type FinancialBreakdown = {
+  items_subtotal?: MoneyValue;
+  subtotal?: MoneyValue;
+  discount?: MoneyValue;
+  discount_amount?: MoneyValue;
+  shipping?: MoneyValue;
+  shipping_fee?: MoneyValue;
+  delivery?: MoneyValue;
+  delivery_fee?: MoneyValue;
+  tax?: MoneyValue;
+  tax_amount?: MoneyValue;
+  vat?: MoneyValue;
+  vat_amount?: MoneyValue;
+  total?: MoneyValue;
+  total_price?: MoneyValue;
+  currency?: string | null;
+};
+
+export type RefundSummary = {
+  id?: number | string;
+  reference?: string | null;
+  status?: string | null;
+  amount?: MoneyValue;
+  tax_amount?: MoneyValue;
+  vat_amount?: MoneyValue;
+  reason?: string | null;
+  receipt_url?: string | null;
+  invoice_url?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+};
+
 export type Order = {
   id: number;
   slug: string;
@@ -202,6 +238,13 @@ export type Order = {
   items_subtotal?: string | number;
   discount_amount?: string | number;
   shipping_fee?: string | number;
+  tax_amount?: MoneyValue;
+  vat_amount?: MoneyValue;
+  financial_breakdown?: FinancialBreakdown | null;
+  refund_status?: string | null;
+  refunds?: RefundSummary[];
+  receipt_url?: string | null;
+  invoice_url?: string | null;
   total_price?: string | number;
   pickup_station_id?: number | null;
   pickup_station_name?: string;
@@ -285,6 +328,11 @@ export type Payment = {
   external_id?: string | null;
   transaction_id?: string | null;
   order_slug?: string | null;
+  refund_status?: string | null;
+  refunds?: RefundSummary[];
+  receipt_url?: string | null;
+  invoice_url?: string | null;
+  invoice_number?: string | null;
   paid_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

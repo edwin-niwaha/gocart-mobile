@@ -264,6 +264,22 @@ const numeric = (...values: (string | number | null | undefined)[]) => {
   return 0;
 };
 
+const firstBackendAmount = (
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+) => {
+  if (!source) return undefined;
+
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value as string | number;
+    }
+  }
+
+  return undefined;
+};
+
 function AddressFormModal({
   visible,
   loading,
@@ -803,6 +819,12 @@ export default function CheckoutScreen() {
     () => numeric(checkoutSummary?.discount, checkoutSummary?.discount_amount),
     [checkoutSummary],
   );
+  const taxAmount = firstBackendAmount(checkoutSummary, [
+    "tax_amount",
+    "vat_amount",
+    "tax",
+    "vat",
+  ]);
 
   const total = useMemo(
     () =>
@@ -1774,6 +1796,13 @@ export default function CheckoutScreen() {
                   <Text style={styles.discountValue}>
                     -{money(discountAmount)}
                   </Text>
+                </View>
+              ) : null}
+
+              {taxAmount !== undefined ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>VAT / Tax</Text>
+                  <Text style={styles.metaValue}>{money(taxAmount)}</Text>
                 </View>
               ) : null}
 

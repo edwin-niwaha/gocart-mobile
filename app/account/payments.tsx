@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -60,8 +61,16 @@ function providerLabel(provider?: string) {
   return labels[String(provider || '').toUpperCase()] || provider || 'Payment';
 }
 
+function getPaymentDocumentUrl(payment: Payment, key: 'receipt_url' | 'invoice_url') {
+  const value = payment[key];
+  return typeof value === 'string' && value.trim() ? value : '';
+}
+
 function PaymentCard({ payment }: { payment: Payment }) {
   const color = statusColor(payment.status);
+  const refunds = Array.isArray(payment.refunds) ? payment.refunds : [];
+  const receiptUrl = getPaymentDocumentUrl(payment, 'receipt_url');
+  const invoiceUrl = getPaymentDocumentUrl(payment, 'invoice_url');
 
   return (
     <View style={styles.card}>
@@ -112,6 +121,59 @@ function PaymentCard({ payment }: { payment: Payment }) {
           <Text style={styles.detailText}>{formatDate(payment.paid_at)}</Text>
         </View>
       </View>
+
+      {payment.refund_status || refunds.length > 0 ? (
+        <View style={styles.refundBox}>
+          <View style={styles.refundHeader}>
+            <Text style={styles.refundTitle}>Refund status</Text>
+            {payment.refund_status ? (
+              <Text style={styles.refundStatus}>
+                {String(payment.refund_status).toUpperCase()}
+              </Text>
+            ) : null}
+          </View>
+
+          {refunds.map((refund, index) => (
+            <View
+              key={refund.id ?? refund.reference ?? index}
+              style={styles.refundItem}
+            >
+              <Text style={styles.refundAmount}>{money(refund.amount ?? 0)}</Text>
+              <Text style={styles.refundMeta}>
+                {String(refund.status || 'Refund').toUpperCase()}
+                {refund.reason ? ` • ${refund.reason}` : ''}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {receiptUrl || invoiceUrl ? (
+        <View style={styles.documentRow}>
+          {receiptUrl ? (
+            <Pressable
+              onPress={() => Linking.openURL(receiptUrl)}
+              style={styles.documentButton}
+            >
+              <Ionicons name="receipt-outline" size={15} color={colors.primary} />
+              <Text style={styles.documentButtonText}>Receipt</Text>
+            </Pressable>
+          ) : null}
+          {invoiceUrl ? (
+            <Pressable
+              onPress={() => Linking.openURL(invoiceUrl)}
+              style={styles.documentButton}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={15}
+                color={colors.primary}
+              />
+              <Text style={styles.documentButtonText}>Invoice</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -374,6 +436,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.text,
+  },
+  refundBox: {
+    gap: 8,
+    padding: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    backgroundColor: '#F5F3FF',
+  },
+  refundHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  refundTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+  },
+  refundStatus: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#7C3AED',
+  },
+  refundItem: {
+    padding: 10,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+  },
+  refundAmount: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  refundMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  documentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  documentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  documentButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.primary,
   },
   centerCard: {
     alignItems: 'center',

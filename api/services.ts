@@ -611,6 +611,10 @@ export type CheckoutSummary = {
   discount_amount?: string | number;
   shipping?: string | number;
   shipping_fee?: string | number;
+  tax?: string | number | null;
+  tax_amount?: string | number | null;
+  vat?: string | number | null;
+  vat_amount?: string | number | null;
   total?: string | number;
   total_price?: string | number;
   coupon_code?: string | null;

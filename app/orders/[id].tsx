@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -128,6 +129,34 @@ function getItemCount(order?: Order) {
     (sum, item) => sum + Number(item.quantity || 0),
     0
   );
+}
+
+function firstAmount(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+) {
+  if (!source) return undefined;
+
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && value !== '') {
+      return value as string | number;
+    }
+  }
+
+  return undefined;
+}
+
+function getOrderAmount(order: Order, keys: string[]) {
+  return (
+    firstAmount(order.financial_breakdown as Record<string, unknown> | null, keys) ??
+    firstAmount(order as unknown as Record<string, unknown>, keys)
+  );
+}
+
+function getDocumentUrl(order: Order, key: 'receipt_url' | 'invoice_url') {
+  const value = order[key];
+  return typeof value === 'string' && value.trim() ? value : '';
 }
 
 function formatDate(value?: string) {
@@ -360,6 +389,25 @@ export default function OrderDetailsScreen() {
   const orderStatusColor = getStatusColor(order.status);
   const itemCount = getItemCount(order);
   const reviewAllowed = canReviewOrder(order.status);
+  const subtotalAmount = getOrderAmount(order, ['items_subtotal', 'subtotal']);
+  const discountAmount = getOrderAmount(order, ['discount_amount', 'discount']);
+  const shippingAmount = getOrderAmount(order, [
+    'shipping_fee',
+    'shipping',
+    'delivery_fee',
+    'delivery',
+  ]);
+  const taxAmount = getOrderAmount(order, [
+    'tax_amount',
+    'vat_amount',
+    'tax',
+    'vat',
+  ]);
+  const totalAmount =
+    getOrderAmount(order, ['total_price', 'total']) ?? order.total_price ?? 0;
+  const refunds = Array.isArray(order.refunds) ? order.refunds : [];
+  const receiptUrl = getDocumentUrl(order, 'receipt_url');
+  const invoiceUrl = getDocumentUrl(order, 'invoice_url');
 
   return (
     <Screen>
@@ -390,7 +438,7 @@ export default function OrderDetailsScreen() {
 
             <Text style={styles.heroTitle}>Order Details</Text>
             <Text style={styles.heroOrderNo}>#{order.slug || order.id}</Text>
-            <Text style={styles.totalAmount}>{money(order.total_price ?? 0)}</Text>
+            <Text style={styles.totalAmount}>{money(totalAmount)}</Text>
 
             <View style={styles.heroMetaRow}>
               <View style={styles.metaPill}>
@@ -419,7 +467,89 @@ export default function OrderDetailsScreen() {
               label="Items"
               value={`${itemCount} item${itemCount === 1 ? '' : 's'}`}
             />
-            <DetailRow label="Total" value={money(order.total_price ?? 0)} />
+            <DetailRow label="Total" value={money(totalAmount)} />
+
+            <View style={styles.summaryDivider} />
+            <Text style={styles.subsectionTitle}>Financial breakdown</Text>
+            {subtotalAmount !== undefined ? (
+              <DetailRow label="Subtotal" value={money(subtotalAmount)} />
+            ) : null}
+            {discountAmount !== undefined ? (
+              <DetailRow
+                label="Discount"
+                value={`-${money(discountAmount)}`}
+                valueStyle={styles.discountText}
+              />
+            ) : null}
+            {shippingAmount !== undefined ? (
+              <DetailRow
+                label="Delivery / Shipping"
+                value={money(shippingAmount)}
+              />
+            ) : null}
+            {taxAmount !== undefined ? (
+              <DetailRow label="VAT / Tax" value={money(taxAmount)} />
+            ) : null}
+            <DetailRow label="Total" value={money(totalAmount)} />
+
+            {order.refund_status ? (
+              <View style={styles.refundBadge}>
+                <Text style={styles.refundBadgeText}>
+                  Refund {String(order.refund_status).toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+
+            {refunds.length > 0 ? (
+              <View style={styles.refundList}>
+                <Text style={styles.subsectionTitle}>Refund history</Text>
+                {refunds.map((refund, index) => (
+                  <View
+                    key={refund.id ?? refund.reference ?? index}
+                    style={styles.refundItem}
+                  >
+                    <Text style={styles.refundAmount}>
+                      {money(refund.amount ?? 0)}
+                    </Text>
+                    <Text style={styles.refundMeta}>
+                      {String(refund.status || 'Refund').toUpperCase()}
+                      {refund.reason ? ` • ${refund.reason}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {receiptUrl || invoiceUrl ? (
+              <View style={styles.documentRow}>
+                {receiptUrl ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(receiptUrl)}
+                    style={styles.documentButton}
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={15}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.documentButtonText}>Receipt</Text>
+                  </Pressable>
+                ) : null}
+                {invoiceUrl ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(invoiceUrl)}
+                    style={styles.documentButton}
+                  >
+                    <Ionicons
+                      name="document-text-outline"
+                      size={15}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.documentButtonText}>Invoice</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             {!!order.description && (
               <View style={styles.noteBox}>
                 <Text style={styles.noteLabel}>Order note</Text>
@@ -659,6 +789,82 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
     color: colors.text,
+  },
+
+  subsectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.muted,
+    textTransform: 'uppercase',
+  },
+
+  discountText: {
+    color: '#047857',
+  },
+
+  refundBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+
+  refundBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#7C3AED',
+  },
+
+  refundList: {
+    gap: 8,
+  },
+
+  refundItem: {
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  refundAmount: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: colors.text,
+  },
+
+  refundMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+
+  documentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  documentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+
+  documentButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.primary,
   },
 
   noteBox: {
